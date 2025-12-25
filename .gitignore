@@ -1,0 +1,35 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.suo
+*.user
+
+# IDE
+.idea/
+.vscode/
+
+# Compiled files
+*.obj
+*.o
+*.lib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+
+# HLSL compiled shaders
+*.cso
+*.fxc
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
