@@ -4,6 +4,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <memory>
 
 namespace blurwindow {
 
@@ -267,5 +268,10 @@ private:
     float m_sigma = 5.0f;
     int m_radius = 15;
 };
+
+// Factory function
+std::unique_ptr<IBlurEffect> CreateGaussianBlur() {
+    return std::make_unique<GaussianBlur>();
+}
 
 } // namespace blurwindow

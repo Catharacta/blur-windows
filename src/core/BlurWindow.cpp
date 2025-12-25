@@ -429,21 +429,4 @@ float BlurWindow::GetCurrentFPS() const {
     return m_impl->GetCurrentFPS();
 }
 
-// Factory function implementations
-std::unique_ptr<ICaptureSubsystem> CreateDXGICapture() {
-    // Will be properly linked from DXGICapture.cpp
-    return nullptr;  // TODO: Implement factory
-}
-
-std::unique_ptr<IBlurEffect> CreateGaussianBlur() {
-    // Will be properly linked from GaussianBlur.cpp
-    return nullptr;  // TODO: Implement factory
-}
-
-std::unique_ptr<IPresenter> CreateULWPresenter() {
-    // Will be properly linked from ULWPresenter.cpp
-    return nullptr;  // TODO: Implement factory
-}
-
 } // namespace blurwindow
-
