@@ -20,7 +20,12 @@ public:
         , m_preset(QualityPreset::Balanced)
         , m_running(false)
         , m_currentFPS(0.0f)
+        , m_useDirectComp(false)
     {
+        // Check if DirectComposition is available before creating window
+        m_useDirectComp = IsDirectCompositionAvailable();
+        
+        // Create window with appropriate style
         CreateBlurWindow();
         InitializeGraphics();
     }
@@ -155,10 +160,16 @@ private:
             m_effect.reset();
         }
         
-        // Initialize presenter using factory (auto: DirectComp preferred, ULW fallback)
-        m_presenter = SubsystemFactory::CreatePresenter(PresenterType::Auto, m_hwnd, m_device);
+        // Initialize presenter based on pre-determined type
+        PresenterType presenterType = m_useDirectComp ? PresenterType::DirectComp : PresenterType::ULW;
+        m_presenter = SubsystemFactory::CreatePresenter(presenterType, m_hwnd, m_device);
         if (!m_presenter) {
-            OutputDebugStringA("Failed to initialize any presenter\n");
+            // Fallback to ULW if DirectComp failed
+            if (m_useDirectComp) {
+                OutputDebugStringA("DirectComp presenter failed, but window was created for DirectComp. Cannot fallback.\n");
+            } else {
+                OutputDebugStringA("Failed to initialize ULW presenter\n");
+            }
         }
         
         m_graphicsInitialized = (m_capture && m_effect && m_presenter);
@@ -221,8 +232,19 @@ private:
             classRegistered = true;
         }
 
-        // Create layered window
-        DWORD exStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        // Choose window style based on presenter type
+        DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        
+        if (m_useDirectComp) {
+            // DirectComposition: use WS_EX_NOREDIRECTIONBITMAP for direct composition
+            exStyle |= WS_EX_NOREDIRECTIONBITMAP;
+            OutputDebugStringA("Creating window for DirectComposition\n");
+        } else {
+            // UpdateLayeredWindow: use WS_EX_LAYERED for alpha blending
+            exStyle |= WS_EX_LAYERED;
+            OutputDebugStringA("Creating window for UpdateLayeredWindow\n");
+        }
+        
         if (m_options.topMost) {
             exStyle |= WS_EX_TOPMOST;
         }
@@ -359,6 +381,20 @@ private:
     std::unique_ptr<ICaptureSubsystem> m_capture;
     std::unique_ptr<IBlurEffect> m_effect;
     std::unique_ptr<IPresenter> m_presenter;
+    bool m_useDirectComp = false;
+
+    // Helper to check if DirectComposition is available
+    static bool IsDirectCompositionAvailable() {
+        // Try to load dcomp.dll
+        HMODULE dcompDll = LoadLibraryW(L"dcomp.dll");
+        if (dcompDll) {
+            FreeLibrary(dcompDll);
+            OutputDebugStringA("DirectComposition is available\n");
+            return true;
+        }
+        OutputDebugStringA("DirectComposition not available\n");
+        return false;
+    }
 };
 
 BlurWindow::BlurWindow(HWND owner, const WindowOptions& opts)
