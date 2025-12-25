@@ -4,6 +4,7 @@
 #include <string>
 #include <thread>
 #include <chrono>
+#include <conio.h>
 
 using namespace blurwindow;
 

@@ -1,4 +1,5 @@
 #include "IBlurEffect.h"
+#include <algorithm>
 
 namespace blurwindow {
 
@@ -100,11 +101,11 @@ public:
     }
 
     void SetIterations(int iterations) {
-        m_iterations = std::clamp(iterations, 1, 8);
+        m_iterations = (std::max)(1, (std::min)(iterations, 8));
     }
 
     void SetOffset(float offset) {
-        m_offset = std::max(0.0f, offset);
+        m_offset = (std::max)(0.0f, offset);
     }
 
 private:

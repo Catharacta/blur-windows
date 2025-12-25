@@ -3,6 +3,7 @@
 #include "../core/FullscreenRenderer.h"
 #include <vector>
 #include <cmath>
+#include <algorithm>
 
 namespace blurwindow {
 
@@ -188,10 +189,10 @@ public:
     }
 
     void SetSigma(float sigma) {
-        m_sigma = std::max(0.1f, std::min(sigma, 50.0f));
+        m_sigma = (std::max)(0.1f, (std::min)(sigma, 50.0f));
         // Update radius based on sigma (3-sigma rule)
         m_radius = static_cast<int>(std::ceil(m_sigma * 3.0f));
-        m_radius = std::min(m_radius, 32);  // Max 32 samples per side
+        m_radius = (std::min)(m_radius, 32);  // Max 32 samples per side
     }
 
     float GetSigma() const { return m_sigma; }

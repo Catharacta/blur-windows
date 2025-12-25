@@ -229,7 +229,7 @@ private:
             wc.lpfnWndProc = DefWindowProcW;
             wc.hInstance = GetModuleHandleW(nullptr);
             wc.lpszClassName = CLASS_NAME;
-            wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+            wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));  // IDC_ARROW
             RegisterClassExW(&wc);
             classRegistered = true;
         }

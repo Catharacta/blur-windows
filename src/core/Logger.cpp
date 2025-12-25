@@ -1,3 +1,4 @@
+#include <windows.h>
 #include <string>
 #include <fstream>
 #include <mutex>
@@ -5,6 +6,7 @@
 #include <iomanip>
 #include <sstream>
 #include <cstdio>
+#include <cstdarg>
 
 namespace blurwindow {
 

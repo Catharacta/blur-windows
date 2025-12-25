@@ -1,4 +1,5 @@
 #include "IBlurEffect.h"
+#include <algorithm>
 
 namespace blurwindow {
 
@@ -72,7 +73,7 @@ public:
     }
 
     void SetRadius(int radius) {
-        m_radius = std::clamp(radius, 1, 16);
+        m_radius = (std::max)(1, (std::min)(radius, 16));
     }
 
 private:
