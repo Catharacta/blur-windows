@@ -1,8 +1,6 @@
 #include "blurwindow/blur_window.h"
 #include "blurwindow/blurwindow.h"
-#include "../capture/ICaptureSubsystem.h"
-#include "../effects/IBlurEffect.h"
-#include "../presentation/IPresenter.h"
+#include "SubsystemFactory.h"
 #include "FullscreenRenderer.h"
 #include <thread>
 #include <atomic>
@@ -13,16 +11,6 @@
 using Microsoft::WRL::ComPtr;
 
 namespace blurwindow {
-
-// Forward declarations for implementations
-class DXGICapture;
-class GaussianBlur;
-class ULWPresenter;
-
-// Factory functions (defined in respective .cpp files)
-std::unique_ptr<ICaptureSubsystem> CreateDXGICapture();
-std::unique_ptr<IBlurEffect> CreateGaussianBlur();
-std::unique_ptr<IPresenter> CreateULWPresenter();
 
 class BlurWindow::Impl {
 public:
@@ -148,8 +136,8 @@ private:
         // Create output texture
         if (!CreateOutputTexture()) return false;
         
-        // Initialize capture
-        m_capture = CreateDXGICapture();
+        // Initialize capture using factory
+        m_capture = SubsystemFactory::CreateCapture(CaptureType::DXGI);
         if (m_capture && !m_capture->Initialize(m_device)) {
             OutputDebugStringA("Failed to initialize DXGI capture\n");
             m_capture.reset();
@@ -160,18 +148,17 @@ private:
             m_capture->SetSelfWindow(m_hwnd);
         }
         
-        // Initialize effect
-        m_effect = CreateGaussianBlur();
+        // Initialize effect using factory
+        m_effect = SubsystemFactory::CreateEffect(EffectType::Gaussian);
         if (m_effect && !m_effect->Initialize(m_device)) {
             OutputDebugStringA("Failed to initialize Gaussian blur\n");
             m_effect.reset();
         }
         
-        // Initialize presenter
-        m_presenter = CreateULWPresenter();
-        if (m_presenter && !m_presenter->Initialize(m_hwnd, m_device)) {
-            OutputDebugStringA("Failed to initialize presenter\n");
-            m_presenter.reset();
+        // Initialize presenter using factory (auto: DirectComp preferred, ULW fallback)
+        m_presenter = SubsystemFactory::CreatePresenter(PresenterType::Auto, m_hwnd, m_device);
+        if (!m_presenter) {
+            OutputDebugStringA("Failed to initialize any presenter\n");
         }
         
         m_graphicsInitialized = (m_capture && m_effect && m_presenter);
