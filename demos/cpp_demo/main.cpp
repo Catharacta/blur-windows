@@ -8,9 +8,31 @@
 
 using namespace blurwindow;
 
-// Simple console-based demo
+void PrintHelp() {
+    std::cout << "\n=== Controls ===" << std::endl;
+    std::cout << "  [1-3]  Switch effect: 1=Gaussian, 2=Kawase, 3=Box" << std::endl;
+    std::cout << "  [Enter/Space] Cycle quality preset" << std::endl;
+    std::cout << "  [Arrow Keys] Move window (Up/Down/Left/Right)" << std::endl;
+    std::cout << "  [+/-]  Resize window" << std::endl;
+    std::cout << "  [t]    Toggle topmost" << std::endl;
+    std::cout << "  [c]    Toggle click-through" << std::endl;
+    std::cout << "  [h]    Show this help" << std::endl;
+    std::cout << "  [q]    Quit" << std::endl;
+    std::cout << "================\n" << std::endl;
+}
+
+const char* GetPresetName(QualityPreset preset) {
+    switch (preset) {
+        case QualityPreset::High: return "High";
+        case QualityPreset::Balanced: return "Balanced";
+        case QualityPreset::Performance: return "Performance";
+        case QualityPreset::Minimal: return "Minimal";
+        default: return "Unknown";
+    }
+}
+
 int main() {
-    std::cout << "=== BlurWindow Library Demo ===" << std::endl;
+    std::cout << "=== BlurWindow Library Interactive Demo ===" << std::endl;
     std::cout << "Version: " << BLURWINDOW_VERSION_MAJOR << "."
               << BLURWINDOW_VERSION_MINOR << "."
               << BLURWINDOW_VERSION_PATCH << std::endl;
@@ -28,10 +50,13 @@ int main() {
     }
     std::cout << "    BlurSystem initialized successfully." << std::endl;
 
-    // Create a demo window (owner = desktop)
+    // Initial window position and size
+    int winX = 100, winY = 100, winW = 400, winH = 300;
+
+    // Create a demo window
     WindowOptions winOpts = {};
-    winOpts.owner = nullptr;  // No owner
-    winOpts.bounds = {100, 100, 500, 400};  // 400x300 window
+    winOpts.owner = nullptr;
+    winOpts.bounds = {winX, winY, winX + winW, winY + winH};
     winOpts.topMost = true;
     winOpts.clickThrough = true;
 
@@ -51,40 +76,120 @@ int main() {
     std::cout << "[3] Starting blur effect..." << std::endl;
     window->Start();
 
-    // Demo loop
-    std::cout << std::endl;
-    std::cout << "Demo running. Press Enter to cycle through presets, 'q' to quit." << std::endl;
-    std::cout << std::endl;
+    PrintHelp();
 
+    // Current state
     QualityPreset presets[] = {
         QualityPreset::High,
         QualityPreset::Balanced,
         QualityPreset::Performance,
         QualityPreset::Minimal
     };
-    const char* presetNames[] = {"High", "Balanced", "Performance", "Minimal"};
-    int currentPreset = 1;  // Start with Balanced
+    int currentPresetIndex = 1;  // Start with Balanced
+    const char* currentEffect = "Gaussian";
+    bool topMost = true;
+    bool clickThrough = true;
 
     bool running = true;
     while (running) {
         // Print current status
-        std::cout << "\r[" << presetNames[currentPreset] << "] FPS: " 
-                  << window->GetCurrentFPS() << "    " << std::flush;
+        std::cout << "\r[" << currentEffect << " | " 
+                  << GetPresetName(presets[currentPresetIndex]) << "] FPS: " 
+                  << window->GetCurrentFPS() 
+                  << " | Pos: " << winX << "," << winY
+                  << " | Size: " << winW << "x" << winH
+                  << "        " << std::flush;
 
-        // Check for input (non-blocking would be better, but simple for demo)
+        // Check for input
         if (_kbhit()) {
             int ch = _getch();
-            if (ch == 'q' || ch == 'Q') {
-                running = false;
-            } else if (ch == '\r' || ch == ' ') {
-                // Cycle preset
-                currentPreset = (currentPreset + 1) % 4;
-                window->SetPreset(presets[currentPreset]);
-                std::cout << std::endl << "Switched to: " << presetNames[currentPreset] << std::endl;
+            
+            // Handle special keys (arrow keys)
+            if (ch == 0 || ch == 224) {
+                int ext = _getch();
+                switch (ext) {
+                    case 72: winY -= 20; break;  // Up
+                    case 80: winY += 20; break;  // Down
+                    case 75: winX -= 20; break;  // Left
+                    case 77: winX += 20; break;  // Right
+                }
+                // Update window position
+                SetWindowPos(window->GetHWND(), nullptr, winX, winY, 0, 0, 
+                    SWP_NOSIZE | SWP_NOZORDER);
+            } else {
+                switch (ch) {
+                    case 'q': case 'Q':
+                        running = false;
+                        break;
+                    
+                    case '\r': case ' ':
+                        // Cycle preset
+                        currentPresetIndex = (currentPresetIndex + 1) % 4;
+                        window->SetPreset(presets[currentPresetIndex]);
+                        std::cout << "\n>>> Switched to preset: " << GetPresetName(presets[currentPresetIndex]) << std::endl;
+                        break;
+                    
+                    case '1':
+                        currentEffect = "Gaussian";
+                        std::cout << "\n>>> Switched to effect: Gaussian" << std::endl;
+                        // TODO: window->SetEffect("gaussian");
+                        break;
+                    
+                    case '2':
+                        currentEffect = "Kawase";
+                        std::cout << "\n>>> Switched to effect: Kawase" << std::endl;
+                        // TODO: window->SetEffect("kawase");
+                        break;
+                    
+                    case '3':
+                        currentEffect = "Box";
+                        std::cout << "\n>>> Switched to effect: Box" << std::endl;
+                        // TODO: window->SetEffect("box");
+                        break;
+                    
+                    case '+': case '=':
+                        winW += 50; winH += 40;
+                        SetWindowPos(window->GetHWND(), nullptr, 0, 0, winW, winH, 
+                            SWP_NOMOVE | SWP_NOZORDER);
+                        break;
+                    
+                    case '-': case '_':
+                        winW = (winW > 150) ? winW - 50 : 150;
+                        winH = (winH > 120) ? winH - 40 : 120;
+                        SetWindowPos(window->GetHWND(), nullptr, 0, 0, winW, winH, 
+                            SWP_NOMOVE | SWP_NOZORDER);
+                        break;
+                    
+                    case 't': case 'T':
+                        topMost = !topMost;
+                        SetWindowPos(window->GetHWND(), 
+                            topMost ? HWND_TOPMOST : HWND_NOTOPMOST,
+                            0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                        std::cout << "\n>>> TopMost: " << (topMost ? "ON" : "OFF") << std::endl;
+                        break;
+                    
+                    case 'c': case 'C':
+                        clickThrough = !clickThrough;
+                        {
+                            LONG_PTR style = GetWindowLongPtr(window->GetHWND(), GWL_EXSTYLE);
+                            if (clickThrough) {
+                                style |= WS_EX_TRANSPARENT;
+                            } else {
+                                style &= ~WS_EX_TRANSPARENT;
+                            }
+                            SetWindowLongPtr(window->GetHWND(), GWL_EXSTYLE, style);
+                        }
+                        std::cout << "\n>>> Click-through: " << (clickThrough ? "ON" : "OFF") << std::endl;
+                        break;
+                    
+                    case 'h': case 'H':
+                        PrintHelp();
+                        break;
+                }
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
     // Cleanup

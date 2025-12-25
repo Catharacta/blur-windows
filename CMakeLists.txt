@@ -130,6 +130,7 @@ endif()
 # Demo applications
 if(BLURWINDOW_BUILD_DEMOS)
     add_subdirectory(demos/cpp_demo)
+    add_subdirectory(demos/gui_demo)
 endif()
 
 # Tests
