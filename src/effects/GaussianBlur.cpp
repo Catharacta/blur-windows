@@ -1,8 +1,70 @@
 #include "IBlurEffect.h"
+#include "../core/ShaderLoader.h"
+#include "../core/FullscreenRenderer.h"
 #include <vector>
 #include <cmath>
 
 namespace blurwindow {
+
+// Embedded Gaussian blur horizontal shader
+static const char* g_GaussianBlurH = R"(
+Texture2D inputTexture : register(t0);
+SamplerState linearSampler : register(s0);
+
+cbuffer BlurParams : register(b0) {
+    float2 texelSize;
+    float sigma;
+    int radius;
+};
+
+float GaussianWeight(float x, float s) {
+    return exp(-0.5f * (x * x) / (s * s));
+}
+
+float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
+    float4 color = float4(0, 0, 0, 0);
+    float weightSum = 0;
+    
+    for (int i = -radius; i <= radius; i++) {
+        float weight = GaussianWeight(float(i), sigma);
+        float2 offset = float2(float(i) * texelSize.x, 0);
+        color += inputTexture.Sample(linearSampler, texcoord + offset) * weight;
+        weightSum += weight;
+    }
+    
+    return color / weightSum;
+}
+)";
+
+// Embedded Gaussian blur vertical shader
+static const char* g_GaussianBlurV = R"(
+Texture2D inputTexture : register(t0);
+SamplerState linearSampler : register(s0);
+
+cbuffer BlurParams : register(b0) {
+    float2 texelSize;
+    float sigma;
+    int radius;
+};
+
+float GaussianWeight(float x, float s) {
+    return exp(-0.5f * (x * x) / (s * s));
+}
+
+float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
+    float4 color = float4(0, 0, 0, 0);
+    float weightSum = 0;
+    
+    for (int i = -radius; i <= radius; i++) {
+        float weight = GaussianWeight(float(i), sigma);
+        float2 offset = float2(0, float(i) * texelSize.y);
+        color += inputTexture.Sample(linearSampler, texcoord + offset) * weight;
+        weightSum += weight;
+    }
+    
+    return color / weightSum;
+}
+)";
 
 /// Separable Gaussian blur effect (2-pass)
 class GaussianBlur : public IBlurEffect {
@@ -17,9 +79,28 @@ public:
     bool Initialize(ID3D11Device* device) override {
         m_device = device;
         
-        // TODO: Load compiled shaders
-        // For now, we'll create shaders at runtime or load from embedded resources
+        // Compile embedded shaders
+        if (!ShaderLoader::CompilePixelShader(
+            device, g_GaussianBlurH, strlen(g_GaussianBlurH),
+            "main", m_horizontalPS.GetAddressOf()
+        )) {
+            OutputDebugStringA("Failed to compile GaussianBlurH shader\n");
+            return false;
+        }
+
+        if (!ShaderLoader::CompilePixelShader(
+            device, g_GaussianBlurV, strlen(g_GaussianBlurV),
+            "main", m_verticalPS.GetAddressOf()
+        )) {
+            OutputDebugStringA("Failed to compile GaussianBlurV shader\n");
+            return false;
+        }
         
+        // Initialize fullscreen renderer
+        if (!m_fullscreenRenderer.Initialize(device)) {
+            return false;
+        }
+
         // Create constant buffer for blur parameters
         D3D11_BUFFER_DESC cbDesc = {};
         cbDesc.ByteWidth = sizeof(BlurParams);
@@ -40,7 +121,7 @@ public:
         hr = m_device->CreateSamplerState(&samplerDesc, m_sampler.GetAddressOf());
         if (FAILED(hr)) return false;
 
-        UpdateKernel();
+        m_initialized = true;
         return true;
     }
 
@@ -51,9 +132,8 @@ public:
         uint32_t width,
         uint32_t height
     ) override {
-        if (!m_horizontalPS || !m_verticalPS) {
-            // Shaders not loaded, fallback to passthrough
-            return true;
+        if (!m_initialized || !m_horizontalPS || !m_verticalPS) {
+            return false;
         }
 
         // Ensure intermediate texture exists
@@ -62,100 +142,78 @@ public:
         // Update constant buffer
         UpdateConstantBuffer(context, width, height);
 
-        // Pass 1: Horizontal blur
+        // Set viewport
+        m_fullscreenRenderer.SetViewport(context, width, height);
+
+        // Pass 1: Horizontal blur (input -> intermediate)
         context->PSSetShader(m_horizontalPS.Get(), nullptr, 0);
         context->PSSetShaderResources(0, 1, &input);
         context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
         context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
         context->OMSetRenderTargets(1, m_intermediateRTV.GetAddressOf(), nullptr);
         
-        // Draw fullscreen quad
-        DrawFullscreenQuad(context);
+        m_fullscreenRenderer.DrawFullscreen(context);
 
-        // Pass 2: Vertical blur
+        // Unbind intermediate as SRV before using as input
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        context->PSSetShaderResources(0, 1, &nullSRV);
+
+        // Pass 2: Vertical blur (intermediate -> output)
         context->PSSetShader(m_verticalPS.Get(), nullptr, 0);
         ID3D11ShaderResourceView* intermediateSRV = m_intermediateSRV.Get();
         context->PSSetShaderResources(0, 1, &intermediateSRV);
         context->OMSetRenderTargets(1, &output, nullptr);
         
-        DrawFullscreenQuad(context);
+        m_fullscreenRenderer.DrawFullscreen(context);
 
         // Cleanup
-        ID3D11ShaderResourceView* nullSRV = nullptr;
         context->PSSetShaderResources(0, 1, &nullSRV);
+        ID3D11RenderTargetView* nullRTV = nullptr;
+        context->OMSetRenderTargets(1, &nullRTV, nullptr);
 
         return true;
     }
 
     bool SetParameters(const char* json) override {
         // TODO: Parse JSON
-        // Example: {"sigma": 5.0, "downscale": 0.5}
         return true;
     }
 
     std::string GetParameters() const override {
         char buffer[128];
         snprintf(buffer, sizeof(buffer), 
-            "{\"sigma\": %.2f, \"downscale\": %.2f}",
-            m_sigma, m_downscale);
+            "{\"sigma\": %.2f, \"radius\": %d}",
+            m_sigma, m_radius);
         return buffer;
     }
 
     void SetSigma(float sigma) {
-        m_sigma = std::max(0.1f, sigma);
-        UpdateKernel();
+        m_sigma = std::max(0.1f, std::min(sigma, 50.0f));
+        // Update radius based on sigma (3-sigma rule)
+        m_radius = static_cast<int>(std::ceil(m_sigma * 3.0f));
+        m_radius = std::min(m_radius, 32);  // Max 32 samples per side
     }
 
     float GetSigma() const { return m_sigma; }
-
-    void SetDownscale(float factor) {
-        m_downscale = std::clamp(factor, 0.1f, 1.0f);
-    }
-
-    float GetDownscale() const { return m_downscale; }
+    int GetRadius() const { return m_radius; }
 
 private:
+    // Constant buffer layout (must match shader)
     struct BlurParams {
-        float sigma;
-        float texelSize[2];
-        int sampleCount;
-        float weights[64];  // Max kernel size
-    };
-
-    void UpdateKernel() {
-        // Calculate kernel size based on sigma (3-sigma rule)
-        m_sampleCount = static_cast<int>(std::ceil(m_sigma * 3.0f));
-        m_sampleCount = std::min(m_sampleCount, 32);  // Max 32 samples per side
-
-        // Calculate Gaussian weights
-        m_weights.resize(m_sampleCount * 2 + 1);
-        float sum = 0.0f;
-        
-        for (int i = -m_sampleCount; i <= m_sampleCount; i++) {
-            float weight = std::exp(-0.5f * (i * i) / (m_sigma * m_sigma));
-            m_weights[i + m_sampleCount] = weight;
-            sum += weight;
-        }
-
-        // Normalize
-        for (auto& w : m_weights) {
-            w /= sum;
-        }
-    }
+        float texelSize[2];  // 8 bytes
+        float sigma;         // 4 bytes
+        int radius;          // 4 bytes
+    };  // Total: 16 bytes (aligned)
 
     void UpdateConstantBuffer(ID3D11DeviceContext* context, uint32_t width, uint32_t height) {
         D3D11_MAPPED_SUBRESOURCE mapped;
         HRESULT hr = context->Map(m_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
         if (SUCCEEDED(hr)) {
             BlurParams* params = static_cast<BlurParams*>(mapped.pData);
+            params->texelSize[0] = 1.0f / static_cast<float>(width);
+            params->texelSize[1] = 1.0f / static_cast<float>(height);
             params->sigma = m_sigma;
-            params->texelSize[0] = 1.0f / width;
-            params->texelSize[1] = 1.0f / height;
-            params->sampleCount = m_sampleCount;
-            
-            size_t copyCount = std::min(m_weights.size(), (size_t)64);
-            memcpy(params->weights, m_weights.data(), copyCount * sizeof(float));
-            
+            params->radius = m_radius;
             context->Unmap(m_constantBuffer.Get(), 0);
         }
     }
@@ -174,7 +232,7 @@ private:
         desc.Height = height;
         desc.MipLevels = 1;
         desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;  // Match capture format
         desc.SampleDesc.Count = 1;
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
@@ -187,13 +245,10 @@ private:
         m_intermediateHeight = height;
     }
 
-    void DrawFullscreenQuad(ID3D11DeviceContext* context) {
-        // TODO: Use a proper fullscreen quad setup
-        // For now, assume vertex shader handles fullscreen triangle
-        context->Draw(3, 0);
-    }
-
     ID3D11Device* m_device = nullptr;
+    bool m_initialized = false;
+    
+    FullscreenRenderer m_fullscreenRenderer;
     
     ComPtr<ID3D11PixelShader> m_horizontalPS;
     ComPtr<ID3D11PixelShader> m_verticalPS;
@@ -209,9 +264,7 @@ private:
 
     // Blur parameters
     float m_sigma = 5.0f;
-    float m_downscale = 1.0f;
-    int m_sampleCount = 15;
-    std::vector<float> m_weights;
+    int m_radius = 15;
 };
 
 } // namespace blurwindow
