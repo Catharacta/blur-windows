@@ -1,5 +1,6 @@
 #include "IBlurEffect.h"
 #include <algorithm>
+#include <memory>
 
 namespace blurwindow {
 
@@ -101,5 +102,10 @@ private:
 
     int m_radius = 3;
 };
+
+// Factory function
+std::unique_ptr<IBlurEffect> CreateBoxBlur() {
+    return std::make_unique<BoxBlur>();
+}
 
 } // namespace blurwindow

@@ -1,5 +1,6 @@
 #include "IBlurEffect.h"
 #include <algorithm>
+#include <memory>
 
 namespace blurwindow {
 
@@ -167,5 +168,10 @@ private:
     int m_iterations = 3;
     float m_offset = 2.0f;
 };
+
+// Factory function
+std::unique_ptr<IBlurEffect> CreateKawaseBlur() {
+    return std::make_unique<KawaseBlur>();
+}
 
 } // namespace blurwindow

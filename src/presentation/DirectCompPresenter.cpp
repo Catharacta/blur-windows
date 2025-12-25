@@ -1,6 +1,7 @@
 #include "IPresenter.h"
 #include <dcomp.h>
 #include <dxgi1_2.h>
+#include <memory>
 
 #pragma comment(lib, "dcomp.lib")
 
@@ -23,7 +24,10 @@ public:
 
         // Create DirectComposition device
         hr = DCompositionCreateDevice(dxgiDevice.Get(), IID_PPV_ARGS(m_dcompDevice.GetAddressOf()));
-        if (FAILED(hr)) return false;
+        if (FAILED(hr)) {
+            OutputDebugStringA("DirectComposition not available, fallback to ULW\n");
+            return false;
+        }
 
         // Create target for the window
         hr = m_dcompDevice->CreateTargetForHwnd(m_hwnd, TRUE, m_dcompTarget.GetAddressOf());
@@ -42,11 +46,12 @@ public:
 
         // Commit
         hr = m_dcompDevice->Commit();
-        return SUCCEEDED(hr);
+        m_initialized = SUCCEEDED(hr);
+        return m_initialized;
     }
 
     bool Present(ID3D11Texture2D* texture) override {
-        if (!m_swapChain || !texture) return false;
+        if (!m_initialized || !m_swapChain || !texture) return false;
 
         // Get back buffer
         ComPtr<ID3D11Texture2D> backBuffer;
@@ -58,9 +63,12 @@ public:
         m_device->GetImmediateContext(context.GetAddressOf());
         context->CopyResource(backBuffer.Get(), texture);
 
-        // Present
+        // Present (VSync off for lower latency)
         DXGI_PRESENT_PARAMETERS params = {};
-        hr = m_swapChain->Present1(1, 0, &params);  // VSync on
+        hr = m_swapChain->Present1(0, 0, &params);
+        
+        // Commit composition
+        m_dcompDevice->Commit();
         
         return SUCCEEDED(hr);
     }
@@ -72,15 +80,15 @@ public:
         m_width = width;
         m_height = height;
 
-        // Resize swap chain
-        HRESULT hr = m_swapChain->ResizeBuffers(2, width, height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
-        if (FAILED(hr)) return false;
+        // Release back buffer references before resize
+        m_swapChain->ResizeBuffers(2, width, height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
 
         m_dcompDevice->Commit();
         return true;
     }
 
     void Shutdown() override {
+        m_initialized = false;
         m_visual.Reset();
         m_dcompTarget.Reset();
         m_dcompDevice.Reset();
@@ -109,7 +117,7 @@ private:
         ComPtr<IDXGIFactory2> factory;
         adapter->GetParent(IID_PPV_ARGS(factory.GetAddressOf()));
 
-        // Create swap chain
+        // Create swap chain for composition
         DXGI_SWAP_CHAIN_DESC1 desc = {};
         desc.Width = m_width;
         desc.Height = m_height;
@@ -134,6 +142,7 @@ private:
     ID3D11Device* m_device = nullptr;
     uint32_t m_width = 0;
     uint32_t m_height = 0;
+    bool m_initialized = false;
 
     ComPtr<IDCompositionDevice> m_dcompDevice;
     ComPtr<IDCompositionTarget> m_dcompTarget;
@@ -141,4 +150,10 @@ private:
     ComPtr<IDXGISwapChain1> m_swapChain;
 };
 
+// Factory function
+std::unique_ptr<IPresenter> CreateDirectCompPresenter() {
+    return std::make_unique<DirectCompPresenter>();
+}
+
 } // namespace blurwindow
+

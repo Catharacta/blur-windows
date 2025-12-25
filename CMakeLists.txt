@@ -34,6 +34,7 @@ set(WINDOWS_LIBS
     windowscodecs
     dwmapi
     d3dcompiler
+    winmm
 )
 
 # Include directories

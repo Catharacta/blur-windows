@@ -1,8 +1,6 @@
 #include "blurwindow/blur_window.h"
 #include "blurwindow/blurwindow.h"
-#include "../capture/ICaptureSubsystem.h"
-#include "../effects/IBlurEffect.h"
-#include "../presentation/IPresenter.h"
+#include "SubsystemFactory.h"
 #include "FullscreenRenderer.h"
 #include <thread>
 #include <atomic>
@@ -14,16 +12,6 @@ using Microsoft::WRL::ComPtr;
 
 namespace blurwindow {
 
-// Forward declarations for implementations
-class DXGICapture;
-class GaussianBlur;
-class ULWPresenter;
-
-// Factory functions (defined in respective .cpp files)
-std::unique_ptr<ICaptureSubsystem> CreateDXGICapture();
-std::unique_ptr<IBlurEffect> CreateGaussianBlur();
-std::unique_ptr<IPresenter> CreateULWPresenter();
-
 class BlurWindow::Impl {
 public:
     Impl(HWND owner, const WindowOptions& opts)
@@ -32,7 +20,12 @@ public:
         , m_preset(QualityPreset::Balanced)
         , m_running(false)
         , m_currentFPS(0.0f)
+        , m_useDirectComp(false)
     {
+        // Check if DirectComposition is available before creating window
+        m_useDirectComp = IsDirectCompositionAvailable();
+        
+        // Create window with appropriate style
         CreateBlurWindow();
         InitializeGraphics();
     }
@@ -148,8 +141,8 @@ private:
         // Create output texture
         if (!CreateOutputTexture()) return false;
         
-        // Initialize capture
-        m_capture = CreateDXGICapture();
+        // Initialize capture using factory
+        m_capture = SubsystemFactory::CreateCapture(CaptureType::DXGI);
         if (m_capture && !m_capture->Initialize(m_device)) {
             OutputDebugStringA("Failed to initialize DXGI capture\n");
             m_capture.reset();
@@ -160,18 +153,23 @@ private:
             m_capture->SetSelfWindow(m_hwnd);
         }
         
-        // Initialize effect
-        m_effect = CreateGaussianBlur();
+        // Initialize effect using factory
+        m_effect = SubsystemFactory::CreateEffect(EffectType::Gaussian);
         if (m_effect && !m_effect->Initialize(m_device)) {
             OutputDebugStringA("Failed to initialize Gaussian blur\n");
             m_effect.reset();
         }
         
-        // Initialize presenter
-        m_presenter = CreateULWPresenter();
-        if (m_presenter && !m_presenter->Initialize(m_hwnd, m_device)) {
-            OutputDebugStringA("Failed to initialize presenter\n");
-            m_presenter.reset();
+        // Initialize presenter based on pre-determined type
+        PresenterType presenterType = m_useDirectComp ? PresenterType::DirectComp : PresenterType::ULW;
+        m_presenter = SubsystemFactory::CreatePresenter(presenterType, m_hwnd, m_device);
+        if (!m_presenter) {
+            // Fallback to ULW if DirectComp failed
+            if (m_useDirectComp) {
+                OutputDebugStringA("DirectComp presenter failed, but window was created for DirectComp. Cannot fallback.\n");
+            } else {
+                OutputDebugStringA("Failed to initialize ULW presenter\n");
+            }
         }
         
         m_graphicsInitialized = (m_capture && m_effect && m_presenter);
@@ -234,8 +232,19 @@ private:
             classRegistered = true;
         }
 
-        // Create layered window
-        DWORD exStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        // Choose window style based on presenter type
+        DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        
+        if (m_useDirectComp) {
+            // DirectComposition: use WS_EX_NOREDIRECTIONBITMAP for direct composition
+            exStyle |= WS_EX_NOREDIRECTIONBITMAP;
+            OutputDebugStringA("Creating window for DirectComposition\n");
+        } else {
+            // UpdateLayeredWindow: use WS_EX_LAYERED for alpha blending
+            exStyle |= WS_EX_LAYERED;
+            OutputDebugStringA("Creating window for UpdateLayeredWindow\n");
+        }
+        
         if (m_options.topMost) {
             exStyle |= WS_EX_TOPMOST;
         }
@@ -269,16 +278,14 @@ private:
     void RenderLoop() {
         using clock = std::chrono::high_resolution_clock;
         
-        auto lastFrame = clock::now();
+        // Enable high-resolution timer (1ms precision)
+        timeBeginPeriod(1);
+        
         int frameCount = 0;
         auto lastFPSUpdate = clock::now();
 
         while (m_running) {
-            auto now = clock::now();
-            
-            // Calculate target frame time based on preset
-            int targetFPS = GetTargetFPS();
-            auto targetFrameTime = std::chrono::microseconds(1000000 / targetFPS);
+            auto frameStart = clock::now();
             
             // Render frame
             if (m_graphicsInitialized) {
@@ -288,42 +295,83 @@ private:
             frameCount++;
             
             // Update FPS every second
-            auto fpsDelta = std::chrono::duration_cast<std::chrono::seconds>(now - lastFPSUpdate);
-            if (fpsDelta.count() >= 1) {
-                m_currentFPS = static_cast<float>(frameCount) / fpsDelta.count();
+            auto now = clock::now();
+            auto fpsDelta = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFPSUpdate);
+            if (fpsDelta.count() >= 1000) {
+                m_currentFPS = static_cast<float>(frameCount) * 1000.0f / fpsDelta.count();
                 frameCount = 0;
                 lastFPSUpdate = now;
             }
 
-            // Frame timing
-            auto frameTime = clock::now() - now;
-            if (frameTime < targetFrameTime) {
-                std::this_thread::sleep_for(targetFrameTime - frameTime);
-            }
+            // Frame timing - sleep to achieve target FPS
+            int targetFPS = GetTargetFPS();
+            auto targetFrameTime = std::chrono::microseconds(1000000 / targetFPS);
+            auto frameTime = clock::now() - frameStart;
             
-            lastFrame = now;
+            if (frameTime < targetFrameTime) {
+                auto sleepTime = targetFrameTime - frameTime;
+                // Use sleep for most of the time, then spin for precision
+                auto sleepMs = std::chrono::duration_cast<std::chrono::milliseconds>(sleepTime);
+                if (sleepMs.count() > 2) {
+                    std::this_thread::sleep_for(sleepMs - std::chrono::milliseconds(2));
+                }
+                // Spin wait for remaining time
+                while (clock::now() - frameStart < targetFrameTime) {
+                    std::this_thread::yield();
+                }
+            }
         }
+        
+        timeEndPeriod(1);
     }
 
     void RenderFrame() {
+        using clock = std::chrono::high_resolution_clock;
+        
+        auto t0 = clock::now();
+        
         // 1. Capture desktop
         ID3D11Texture2D* capturedTexture = nullptr;
         if (!m_capture->CaptureFrame(m_options.bounds, &capturedTexture)) {
             return;  // No new frame
         }
+        
+        auto t1 = clock::now();
 
         // 2. Create SRV for captured texture
         ComPtr<ID3D11ShaderResourceView> inputSRV;
         HRESULT hr = m_device->CreateShaderResourceView(capturedTexture, nullptr, inputSRV.GetAddressOf());
         if (FAILED(hr)) return;
+        
+        auto t2 = clock::now();
 
         // 3. Apply blur effect
         if (!m_effect->Apply(m_context.Get(), inputSRV.Get(), m_outputRTV.Get(), m_width, m_height)) {
             return;
         }
+        
+        // GPU sync point to get accurate timing
+        m_context->Flush();
+        
+        auto t3 = clock::now();
 
         // 4. Present to window
         m_presenter->Present(m_outputTexture.Get());
+        
+        auto t4 = clock::now();
+        
+        // Log timings periodically
+        static int frameCounter = 0;
+        if (++frameCounter % 60 == 0) {
+            auto captureMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+            auto srvMs = std::chrono::duration<double, std::milli>(t2 - t1).count();
+            auto blurMs = std::chrono::duration<double, std::milli>(t3 - t2).count();
+            auto presentMs = std::chrono::duration<double, std::milli>(t4 - t3).count();
+            auto totalMs = std::chrono::duration<double, std::milli>(t4 - t0).count();
+            
+            printf("[Perf] Capture:%.1fms SRV:%.1fms Blur:%.1fms Present:%.1fms Total:%.1fms\n",
+                captureMs, srvMs, blurMs, presentMs, totalMs);
+        }
     }
 
     int GetTargetFPS() const {
@@ -372,6 +420,20 @@ private:
     std::unique_ptr<ICaptureSubsystem> m_capture;
     std::unique_ptr<IBlurEffect> m_effect;
     std::unique_ptr<IPresenter> m_presenter;
+    bool m_useDirectComp = false;
+
+    // Helper to check if DirectComposition is available
+    static bool IsDirectCompositionAvailable() {
+        // Try to load dcomp.dll
+        HMODULE dcompDll = LoadLibraryW(L"dcomp.dll");
+        if (dcompDll) {
+            FreeLibrary(dcompDll);
+            OutputDebugStringA("DirectComposition is available\n");
+            return true;
+        }
+        OutputDebugStringA("DirectComposition not available\n");
+        return false;
+    }
 };
 
 BlurWindow::BlurWindow(HWND owner, const WindowOptions& opts)
