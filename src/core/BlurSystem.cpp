@@ -136,6 +136,10 @@ bool BlurSystem::IsInitialized() const {
     return m_impl->IsInitialized();
 }
 
+ID3D11Device* BlurSystem::GetDevice() const {
+    return m_impl->GetDevice();
+}
+
 std::unique_ptr<BlurWindow> BlurSystem::CreateBlurWindow(HWND owner, const WindowOptions& opts) {
     if (!m_impl->IsInitialized()) {
         return nullptr;
