@@ -78,12 +78,12 @@ public:
             m_frameAcquired = false;
         }
 
-        // Acquire next frame
+        // Acquire next frame (non-blocking)
         ComPtr<IDXGIResource> desktopResource;
         DXGI_OUTDUPL_FRAME_INFO frameInfo;
         
         HRESULT hr = m_duplication->AcquireNextFrame(
-            16,  // 16ms timeout (~60fps)
+            0,  // 0ms timeout - non-blocking, use cache if no new frame
             &frameInfo,
             desktopResource.GetAddressOf()
         );

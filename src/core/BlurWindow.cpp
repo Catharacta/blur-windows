@@ -278,16 +278,14 @@ private:
     void RenderLoop() {
         using clock = std::chrono::high_resolution_clock;
         
-        auto lastFrame = clock::now();
+        // Enable high-resolution timer (1ms precision)
+        timeBeginPeriod(1);
+        
         int frameCount = 0;
         auto lastFPSUpdate = clock::now();
 
         while (m_running) {
-            auto now = clock::now();
-            
-            // Calculate target frame time based on preset
-            int targetFPS = GetTargetFPS();
-            auto targetFrameTime = std::chrono::microseconds(1000000 / targetFPS);
+            auto frameStart = clock::now();
             
             // Render frame
             if (m_graphicsInitialized) {
@@ -297,42 +295,83 @@ private:
             frameCount++;
             
             // Update FPS every second
-            auto fpsDelta = std::chrono::duration_cast<std::chrono::seconds>(now - lastFPSUpdate);
-            if (fpsDelta.count() >= 1) {
-                m_currentFPS = static_cast<float>(frameCount) / fpsDelta.count();
+            auto now = clock::now();
+            auto fpsDelta = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFPSUpdate);
+            if (fpsDelta.count() >= 1000) {
+                m_currentFPS = static_cast<float>(frameCount) * 1000.0f / fpsDelta.count();
                 frameCount = 0;
                 lastFPSUpdate = now;
             }
 
-            // Frame timing
-            auto frameTime = clock::now() - now;
-            if (frameTime < targetFrameTime) {
-                std::this_thread::sleep_for(targetFrameTime - frameTime);
-            }
+            // Frame timing - sleep to achieve target FPS
+            int targetFPS = GetTargetFPS();
+            auto targetFrameTime = std::chrono::microseconds(1000000 / targetFPS);
+            auto frameTime = clock::now() - frameStart;
             
-            lastFrame = now;
+            if (frameTime < targetFrameTime) {
+                auto sleepTime = targetFrameTime - frameTime;
+                // Use sleep for most of the time, then spin for precision
+                auto sleepMs = std::chrono::duration_cast<std::chrono::milliseconds>(sleepTime);
+                if (sleepMs.count() > 2) {
+                    std::this_thread::sleep_for(sleepMs - std::chrono::milliseconds(2));
+                }
+                // Spin wait for remaining time
+                while (clock::now() - frameStart < targetFrameTime) {
+                    std::this_thread::yield();
+                }
+            }
         }
+        
+        timeEndPeriod(1);
     }
 
     void RenderFrame() {
+        using clock = std::chrono::high_resolution_clock;
+        
+        auto t0 = clock::now();
+        
         // 1. Capture desktop
         ID3D11Texture2D* capturedTexture = nullptr;
         if (!m_capture->CaptureFrame(m_options.bounds, &capturedTexture)) {
             return;  // No new frame
         }
+        
+        auto t1 = clock::now();
 
         // 2. Create SRV for captured texture
         ComPtr<ID3D11ShaderResourceView> inputSRV;
         HRESULT hr = m_device->CreateShaderResourceView(capturedTexture, nullptr, inputSRV.GetAddressOf());
         if (FAILED(hr)) return;
+        
+        auto t2 = clock::now();
 
         // 3. Apply blur effect
         if (!m_effect->Apply(m_context.Get(), inputSRV.Get(), m_outputRTV.Get(), m_width, m_height)) {
             return;
         }
+        
+        // GPU sync point to get accurate timing
+        m_context->Flush();
+        
+        auto t3 = clock::now();
 
         // 4. Present to window
         m_presenter->Present(m_outputTexture.Get());
+        
+        auto t4 = clock::now();
+        
+        // Log timings periodically
+        static int frameCounter = 0;
+        if (++frameCounter % 60 == 0) {
+            auto captureMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+            auto srvMs = std::chrono::duration<double, std::milli>(t2 - t1).count();
+            auto blurMs = std::chrono::duration<double, std::milli>(t3 - t2).count();
+            auto presentMs = std::chrono::duration<double, std::milli>(t4 - t3).count();
+            auto totalMs = std::chrono::duration<double, std::milli>(t4 - t0).count();
+            
+            printf("[Perf] Capture:%.1fms SRV:%.1fms Blur:%.1fms Present:%.1fms Total:%.1fms\n",
+                captureMs, srvMs, blurMs, presentMs, totalMs);
+        }
     }
 
     int GetTargetFPS() const {
