@@ -2,6 +2,7 @@
 #include <dxgi1_2.h>
 #include <d3d11.h>
 #include <wrl/client.h>
+#include <memory>
 
 using Microsoft::WRL::ComPtr;
 
@@ -196,5 +197,10 @@ private:
 
     HWND m_selfHwnd = nullptr;
 };
+
+// Factory function
+std::unique_ptr<ICaptureSubsystem> CreateDXGICapture() {
+    return std::make_unique<DXGICapture>();
+}
 
 } // namespace blurwindow

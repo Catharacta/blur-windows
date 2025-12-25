@@ -1,4 +1,5 @@
 #include "blurwindow/blurwindow.h"
+#include "blurwindow/blur_window.h"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <vector>
@@ -134,6 +135,10 @@ void BlurSystem::Shutdown() {
 
 bool BlurSystem::IsInitialized() const {
     return m_impl->IsInitialized();
+}
+
+ID3D11Device* BlurSystem::GetDevice() const {
+    return m_impl->GetDevice();
 }
 
 std::unique_ptr<BlurWindow> BlurSystem::CreateBlurWindow(HWND owner, const WindowOptions& opts) {

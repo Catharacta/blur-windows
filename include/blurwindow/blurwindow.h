@@ -20,6 +20,9 @@
 #include <windows.h>
 #include <memory>
 
+// Forward declaration for D3D11
+struct ID3D11Device;
+
 namespace blurwindow {
 
 // Forward declarations
@@ -65,6 +68,10 @@ public:
 
     /// Check if system is initialized
     bool IsInitialized() const;
+
+    /// Get the D3D11 device (internal use)
+    /// @return D3D11 device pointer, nullptr if not initialized
+    ID3D11Device* GetDevice() const;
 
     /// Create a blur window
     /// @param owner Owner window handle

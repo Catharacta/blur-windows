@@ -1,4 +1,5 @@
 #include "IPresenter.h"
+#include <memory>
 
 namespace blurwindow {
 
@@ -122,5 +123,10 @@ private:
     uint32_t m_width = 0;
     uint32_t m_height = 0;
 };
+
+// Factory function
+std::unique_ptr<IPresenter> CreateULWPresenter() {
+    return std::make_unique<ULWPresenter>();
+}
 
 } // namespace blurwindow

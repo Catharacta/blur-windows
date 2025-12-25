@@ -33,6 +33,7 @@ set(WINDOWS_LIBS
     dcomp
     windowscodecs
     dwmapi
+    d3dcompiler
 )
 
 # Include directories
@@ -44,6 +45,7 @@ set(CORE_SOURCES
     src/core/BlurWindow.cpp
     src/core/ResourceManager.cpp
     src/core/Logger.cpp
+    src/core/FullscreenRenderer.cpp
 )
 
 # Source files - Capture
