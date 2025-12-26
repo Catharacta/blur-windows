@@ -55,68 +55,80 @@ typedef struct {
     int32_t clickThrough;      // 0 = false, 1 = true
 } BlurWindowOptionsC;
 
+#ifndef BLURWINDOW_API
+#ifdef BLURWINDOW_DLL
+    #ifdef BLURWINDOW_EXPORTS
+        #define BLURWINDOW_API __declspec(dllexport)
+    #else
+        #define BLURWINDOW_API __declspec(dllimport)
+    #endif
+#else
+    #define BLURWINDOW_API
+#endif
+#endif
+
 /// Initialize the blur system
 /// @param opts System options (can be NULL for defaults)
 /// @return System handle, or NULL on failure
-BlurSystemHandle blur_init(const BlurSystemOptionsC* opts);
+BLURWINDOW_API BlurSystemHandle blur_init(const BlurSystemOptionsC* opts);
 
 /// Shutdown the blur system
 /// @param sys System handle
-void blur_shutdown(BlurSystemHandle sys);
+BLURWINDOW_API void blur_shutdown(BlurSystemHandle sys);
 
 /// Create a blur window
 /// @param sys System handle
 /// @param owner Owner window handle (HWND)
 /// @param opts Window options
 /// @return Window handle, or NULL on failure
-BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* owner, const BlurWindowOptionsC* opts);
+BLURWINDOW_API BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* owner, const BlurWindowOptionsC* opts);
 
 /// Destroy a blur window
 /// @param window Window handle
-void blur_destroy_window(BlurWindowHandle window);
+BLURWINDOW_API void blur_destroy_window(BlurWindowHandle window);
 
 /// Start blur effect
 /// @param window Window handle
 /// @return Error code
-BlurErrorCode blur_start(BlurWindowHandle window);
+BLURWINDOW_API BlurErrorCode blur_start(BlurWindowHandle window);
 
 /// Stop blur effect
 /// @param window Window handle
 /// @return Error code
-BlurErrorCode blur_stop(BlurWindowHandle window);
+BLURWINDOW_API BlurErrorCode blur_stop(BlurWindowHandle window);
 
 /// Set quality preset
 /// @param window Window handle
 /// @param preset Quality preset
 /// @return Error code
-BlurErrorCode blur_set_preset(BlurWindowHandle window, BlurQualityPreset preset);
+BLURWINDOW_API BlurErrorCode blur_set_preset(BlurWindowHandle window, BlurQualityPreset preset);
 
 /// Set effect pipeline from JSON
 /// @param window Window handle
 /// @param json_config JSON configuration string
 /// @return Error code
-BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const char* json_config);
+BLURWINDOW_API BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const char* json_config);
 
 /// Set window bounds
 /// @param window Window handle
 /// @param bounds New bounds
 /// @return Error code
-BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds);
+BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds);
 
 /// Get current FPS
 /// @param window Window handle
 /// @return Current FPS, or -1 on error
-float blur_get_fps(BlurWindowHandle window);
+BLURWINDOW_API float blur_get_fps(BlurWindowHandle window);
 
 /// Get last error message
 /// @return Error message string (static, do not free)
-const char* blur_get_last_error(void);
+BLURWINDOW_API const char* blur_get_last_error(void);
 
 /// Enable/disable logging
 /// @param sys System handle
 /// @param enable 0 = disable, 1 = enable
 /// @param path Log file path (NULL for console)
-void blur_enable_logging(BlurSystemHandle sys, int32_t enable, const char* path);
+BLURWINDOW_API void blur_enable_logging(BlurSystemHandle sys, int32_t enable, const char* path);
 
 #ifdef __cplusplus
 }

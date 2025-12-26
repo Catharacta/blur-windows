@@ -26,6 +26,9 @@ public:
     /// @return true on success
     bool SetEffectPipeline(const std::string& jsonConfig);
 
+    /// Check if graphics subsystems are initialized
+    bool IsInitialized() const;
+
     /// Set quality preset
     /// @param preset Quality preset
     void SetPreset(QualityPreset preset);

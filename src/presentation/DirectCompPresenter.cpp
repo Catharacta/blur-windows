@@ -1,4 +1,5 @@
 #include "IPresenter.h"
+#include "../core/Logger.h"
 #include <dcomp.h>
 #include <dxgi1_2.h>
 #include <memory>
@@ -17,21 +18,29 @@ public:
         m_hwnd = hwnd;
         m_device = device;
 
+        LOG_INFO("Initializing DirectComposition presenter...");
+
         // Get DXGI device
         ComPtr<IDXGIDevice> dxgiDevice;
         HRESULT hr = m_device->QueryInterface(IID_PPV_ARGS(dxgiDevice.GetAddressOf()));
-        if (FAILED(hr)) return false;
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to query IDXGIDevice (0x%08X).", hr);
+            return false;
+        }
 
         // Create DirectComposition device
         hr = DCompositionCreateDevice(dxgiDevice.Get(), IID_PPV_ARGS(m_dcompDevice.GetAddressOf()));
         if (FAILED(hr)) {
-            OutputDebugStringA("DirectComposition not available, fallback to ULW\n");
+            LOG_WARN("DirectComposition not available (0x%08X).", hr);
             return false;
         }
 
         // Create target for the window
         hr = m_dcompDevice->CreateTargetForHwnd(m_hwnd, TRUE, m_dcompTarget.GetAddressOf());
-        if (FAILED(hr)) return false;
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to create DComp target (0x%08X).", hr);
+            return false;
+        }
 
         // Create visual
         hr = m_dcompDevice->CreateVisual(m_visual.GetAddressOf());

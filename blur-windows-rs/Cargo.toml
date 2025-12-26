@@ -1,0 +1,17 @@
+[package]
+name = "blur-windows"
+version = "0.1.0"
+edition = "2021"
+description = "Rust bindings for the CustomBlurWindowLibrary"
+
+[dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+# We'll need a build script to link against the C++ library
+# Alternatively, we can use #[link(name = "blurwindow")] in lib.rs

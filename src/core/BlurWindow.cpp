@@ -1,10 +1,12 @@
 #include "blurwindow/blur_window.h"
 #include "blurwindow/blurwindow.h"
+#include "Logger.h"
 #include "SubsystemFactory.h"
 #include "FullscreenRenderer.h"
-#include <thread>
+#include "config/ConfigManager.h"
 #include <atomic>
 #include <chrono>
+#include <mutex>
 #include <d3d11.h>
 #include <wrl/client.h>
 
@@ -22,12 +24,10 @@ public:
         , m_currentFPS(0.0f)
         , m_useDirectComp(false)
     {
-        // Check if DirectComposition is available before creating window
-        m_useDirectComp = IsDirectCompositionAvailable();
-        
-        // Create window with appropriate style
-        CreateBlurWindow();
-        InitializeGraphics();
+        // Don't initialize graphics in constructor
+        // Only determine rendering mode
+        m_useDirectComp = ShouldUseDirectComposition();
+        LOG_INFO("BlurWindow created (DirectComp: %d)", m_useDirectComp);
     }
 
     ~Impl() {
@@ -37,13 +37,28 @@ public:
     }
 
     void Start() {
+        if (m_running) return;
+
+        if (!m_hwnd) {
+            CreateBlurWindow();
+        }
+
+        if (!m_graphicsInitialized) {
+            LOG_INFO("Initializing graphics subsystems in Start()...");
+            if (!InitializeGraphicsBasics() || !InitializeSubsystems()) {
+                LOG_ERROR("Initialization failed. Cannot start render thread.");
+                return;
+            }
+        }
+
         if (m_running.exchange(true)) {
-            return; // Already running
+            return;
         }
         
         m_renderThread = std::thread([this]() {
             RenderLoop();
         });
+        LOG_INFO("BlurWindow render thread started.");
     }
 
     void Stop() {
@@ -120,59 +135,119 @@ public:
     }
 
     bool SetEffectPipeline(const std::string& jsonConfig) {
-        // TODO: Parse JSON and configure pipeline
-        return true;
+        auto config = ConfigManager::ParsePipelineJson(jsonConfig);
+        if (config.effects.empty()) return false;
+
+        auto newEffect = ConfigManager::CreateEffect(config.effects[0].type);
+        if (newEffect && newEffect->Initialize(m_device)) {
+            std::lock_guard<std::mutex> lock(m_graphicsMutex);
+            m_effect = std::move(newEffect);
+            m_graphicsInitialized = (m_capture && m_effect && m_presenter);
+            return true;
+        }
+        return false;
+    }
+
+    bool IsInitialized() const {
+        return m_graphicsInitialized;
+    }
+
+    bool Initialize() {
+        if (m_graphicsInitialized) return true;
+        
+        LOG_INFO("Manual initialization requested.");
+        if (!m_hwnd) CreateBlurWindow();
+        bool success = InitializeGraphicsBasics() && InitializeSubsystems();
+        if (success && m_capture && m_hwnd) {
+            m_capture->SetSelfWindow(m_hwnd);
+        }
+        return success;
     }
 
 private:
-    bool InitializeGraphics() {
-        // Get device from BlurSystem
+    bool InitializeGraphicsBasics() {
         m_device = BlurSystem::Instance().GetDevice();
-        if (!m_device) return false;
-        
+        if (!m_device) {
+            LOG_ERROR("D3D11 Device not available from BlurSystem.");
+            return false;
+        }
+        m_context.Reset();
         m_device->GetImmediateContext(m_context.GetAddressOf());
         
-        // Calculate dimensions
         m_width = m_options.bounds.right - m_options.bounds.left;
         m_height = m_options.bounds.bottom - m_options.bounds.top;
-        if (m_width == 0) m_width = 400;
-        if (m_height == 0) m_height = 300;
+        if (m_width <= 0) m_width = 400;
+        if (m_height <= 0) m_height = 300;
         
-        // Create output texture
-        if (!CreateOutputTexture()) return false;
-        
-        // Initialize capture using factory
+        LOG_INFO("Graphics basics: %dx%d texture.", m_width, m_height);
+        return CreateOutputTexture();
+    }
+
+    bool InitializeSubsystems() {
+        if (!m_device || !m_hwnd) return false;
+
+        LOG_INFO("Initializing subsystems...");
+
+        // 1. Initialize capture
         m_capture = SubsystemFactory::CreateCapture(CaptureType::DXGI);
-        if (m_capture && !m_capture->Initialize(m_device)) {
-            OutputDebugStringA("Failed to initialize DXGI capture\n");
-            m_capture.reset();
-        }
-        
-        // Set self window for capture avoidance
-        if (m_capture && m_hwnd) {
-            m_capture->SetSelfWindow(m_hwnd);
-        }
-        
-        // Initialize effect using factory
-        m_effect = SubsystemFactory::CreateEffect(EffectType::Gaussian);
-        if (m_effect && !m_effect->Initialize(m_device)) {
-            OutputDebugStringA("Failed to initialize Gaussian blur\n");
-            m_effect.reset();
-        }
-        
-        // Initialize presenter based on pre-determined type
-        PresenterType presenterType = m_useDirectComp ? PresenterType::DirectComp : PresenterType::ULW;
-        m_presenter = SubsystemFactory::CreatePresenter(presenterType, m_hwnd, m_device);
-        if (!m_presenter) {
-            // Fallback to ULW if DirectComp failed
-            if (m_useDirectComp) {
-                OutputDebugStringA("DirectComp presenter failed, but window was created for DirectComp. Cannot fallback.\n");
+        if (m_capture) {
+            if (!m_capture->Initialize(m_device)) {
+                LOG_ERROR("Failed to initialize DXGI capture.");
+                m_capture.reset();
             } else {
-                OutputDebugStringA("Failed to initialize ULW presenter\n");
+                m_capture->SetSelfWindow(m_hwnd);
+                LOG_INFO("Capture initialized.");
             }
         }
         
+        // 2. Initialize effect
+        m_effect = SubsystemFactory::CreateEffect(EffectType::Gaussian);
+        if (m_effect) {
+            if (!m_effect->Initialize(m_device)) {
+                LOG_ERROR("Failed to initialize Gaussian effect.");
+                m_effect.reset();
+            } else {
+                LOG_INFO("Effect initialized.");
+            }
+        }
+        
+        // 3. Initialize presenter
+        PresenterType presenterType = m_useDirectComp ? PresenterType::DirectComp : PresenterType::ULW;
+        auto presenter = SubsystemFactory::CreatePresenter(presenterType, m_hwnd, m_device);
+        
+        if (!presenter && m_useDirectComp) {
+            LOG_WARN("DirectComp presenter failed. Falling back to ULW...");
+            m_useDirectComp = false;
+            
+            // Switch window style to layered for ULW
+            if (m_hwnd) {
+                LONG_PTR exStyle = GetWindowLongPtr(m_hwnd, GWL_EXSTYLE);
+                exStyle &= ~WS_EX_NOREDIRECTIONBITMAP;
+                exStyle |= WS_EX_LAYERED;
+                SetWindowLongPtr(m_hwnd, GWL_EXSTYLE, exStyle);
+                // Force style to take effect
+                SetWindowPos(m_hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+                LOG_INFO("Switched window style to WS_EX_LAYERED for fallback.");
+            }
+
+            presenter = SubsystemFactory::CreatePresenter(PresenterType::ULW, m_hwnd, m_device);
+        }
+        
+        if (presenter) {
+            m_presenter = std::move(presenter);
+            LOG_INFO("Presenter initialized (%s).", m_useDirectComp ? "DirectComp" : "ULW");
+        } else {
+            LOG_ERROR("Failed to initialize any presenter.");
+        }
+
         m_graphicsInitialized = (m_capture && m_effect && m_presenter);
+        if (!m_graphicsInitialized) {
+            LOG_ERROR("Initialization partial failure: Cap:%d, Eff:%d, Pres:%d", 
+                m_capture != nullptr, m_effect != nullptr, m_presenter != nullptr);
+        } else {
+            LOG_INFO("All subsystems initialized successfully.");
+        }
+
         return m_graphicsInitialized;
     }
 
@@ -256,7 +331,7 @@ private:
             exStyle,
             CLASS_NAME,
             L"BlurWindow",
-            WS_POPUP,
+            WS_POPUP | WS_VISIBLE,
             m_options.bounds.left,
             m_options.bounds.top,
             m_options.bounds.right - m_options.bounds.left,
@@ -284,12 +359,27 @@ private:
         int frameCount = 0;
         auto lastFPSUpdate = clock::now();
 
+        // Wait a bit for UI thread to finish ShowWindow/etc
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
         while (m_running) {
             auto frameStart = clock::now();
             
-            // Render frame
-            if (m_graphicsInitialized) {
-                RenderFrame();
+            static bool firstFrameLogged = false;
+            
+            { // Strict lock around all D3D11 context usage
+                std::lock_guard<std::mutex> lock(m_graphicsMutex);
+                if (m_graphicsInitialized && m_capture && m_effect && m_presenter) {
+                    ID3D11Texture2D* capturedTexture = nullptr;
+                    // Inside lock, we rely on the 16ms/0ms timeout in DXGICapture to not block UI too long
+                    if (m_capture->CaptureFrame(m_options.bounds, &capturedTexture)) {
+                        RenderFrame(capturedTexture);
+                        if (!firstFrameLogged) {
+                            LOG_INFO("First frame rendered and presented successfully.");
+                            firstFrameLogged = true;
+                        }
+                    }
+                }
             }
 
             frameCount++;
@@ -310,14 +400,10 @@ private:
             
             if (frameTime < targetFrameTime) {
                 auto sleepTime = targetFrameTime - frameTime;
-                // Use sleep for most of the time, then spin for precision
+                // Use precise sleep (shorter intervals)
                 auto sleepMs = std::chrono::duration_cast<std::chrono::milliseconds>(sleepTime);
-                if (sleepMs.count() > 2) {
-                    std::this_thread::sleep_for(sleepMs - std::chrono::milliseconds(2));
-                }
-                // Spin wait for remaining time
-                while (clock::now() - frameStart < targetFrameTime) {
-                    std::this_thread::yield();
+                if (sleepMs.count() > 0) {
+                    std::this_thread::sleep_for(sleepMs);
                 }
             }
         }
@@ -325,33 +411,27 @@ private:
         timeEndPeriod(1);
     }
 
-    void RenderFrame() {
+    void RenderFrame(ID3D11Texture2D* capturedTexture) {
         using clock = std::chrono::high_resolution_clock;
         
         auto t0 = clock::now();
         
-        // 1. Capture desktop
-        ID3D11Texture2D* capturedTexture = nullptr;
-        if (!m_capture->CaptureFrame(m_options.bounds, &capturedTexture)) {
-            return;  // No new frame
-        }
-        
         auto t1 = clock::now();
 
-        // 2. Create SRV for captured texture
-        ComPtr<ID3D11ShaderResourceView> inputSRV;
-        HRESULT hr = m_device->CreateShaderResourceView(capturedTexture, nullptr, inputSRV.GetAddressOf());
-        if (FAILED(hr)) return;
-        
-        auto t2 = clock::now();
-
-        // 3. Apply blur effect
-        if (!m_effect->Apply(m_context.Get(), inputSRV.Get(), m_outputRTV.Get(), m_width, m_height)) {
-            return;
+        // 2. Manage SRV for captured texture
+        if (capturedTexture != m_lastCapturedTexture) {
+            m_capturedSRV.Reset();
+            HRESULT hr = m_device->CreateShaderResourceView(capturedTexture, nullptr, m_capturedSRV.GetAddressOf());
+            if (FAILED(hr)) return;
+            m_lastCapturedTexture = capturedTexture;
         }
         
-        // GPU sync point to get accurate timing
-        m_context->Flush();
+        auto t2 = clock::now();
+ 
+        // 3. Apply blur effect
+        if (!m_effect->Apply(m_context.Get(), m_capturedSRV.Get(), m_outputRTV.Get(), m_width, m_height)) {
+            return;
+        }
         
         auto t3 = clock::now();
 
@@ -360,17 +440,20 @@ private:
         
         auto t4 = clock::now();
         
-        // Log timings periodically
+        // Log timings periodically (only to debug output now)
         static int frameCounter = 0;
-        if (++frameCounter % 60 == 0) {
+        if (++frameCounter % 120 == 0) {
             auto captureMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
             auto srvMs = std::chrono::duration<double, std::milli>(t2 - t1).count();
             auto blurMs = std::chrono::duration<double, std::milli>(t3 - t2).count();
             auto presentMs = std::chrono::duration<double, std::milli>(t4 - t3).count();
             auto totalMs = std::chrono::duration<double, std::milli>(t4 - t0).count();
             
-            printf("[Perf] Capture:%.1fms SRV:%.1fms Blur:%.1fms Present:%.1fms Total:%.1fms\n",
-                captureMs, srvMs, blurMs, presentMs, totalMs);
+            char buf[256];
+            snprintf(buf, sizeof(buf), "[Perf] Cap:%.1fms Blur:%.1fms Pres:%.1fms Total:%.1fms",
+                captureMs, blurMs, presentMs, totalMs);
+            OutputDebugStringA(buf);
+            OutputDebugStringA("\n");
         }
     }
 
@@ -414,7 +497,11 @@ private:
     ComPtr<ID3D11RenderTargetView> m_outputRTV;
     uint32_t m_width = 0;
     uint32_t m_height = 0;
-    bool m_graphicsInitialized = false;
+    std::atomic<bool> m_graphicsInitialized = false;
+
+    // SRV cache for captured texture
+    ComPtr<ID3D11ShaderResourceView> m_capturedSRV;
+    ID3D11Texture2D* m_lastCapturedTexture = nullptr;
 
     // Subsystems
     std::unique_ptr<ICaptureSubsystem> m_capture;
@@ -422,17 +509,19 @@ private:
     std::unique_ptr<IPresenter> m_presenter;
     bool m_useDirectComp = false;
 
-    // Helper to check if DirectComposition is available
-    static bool IsDirectCompositionAvailable() {
+    mutable std::mutex m_graphicsMutex;
+
+    // Helper to check if DirectComposition should be used
+    static bool ShouldUseDirectComposition() {
         // Try to load dcomp.dll
         HMODULE dcompDll = LoadLibraryW(L"dcomp.dll");
-        if (dcompDll) {
-            FreeLibrary(dcompDll);
-            OutputDebugStringA("DirectComposition is available\n");
-            return true;
+        if (!dcompDll) {
+            return false;
         }
-        OutputDebugStringA("DirectComposition not available\n");
-        return false;
+        FreeLibrary(dcompDll);
+        
+        // We could do more checks here, but the real test is in InitializeSubsystems
+        return true;
     }
 };
 
@@ -453,6 +542,10 @@ void BlurWindow::Stop() {
 
 bool BlurWindow::IsRunning() const {
     return m_impl->IsRunning();
+}
+
+bool BlurWindow::IsInitialized() const {
+    return m_impl->IsInitialized();
 }
 
 bool BlurWindow::SetEffectPipeline(const std::string& jsonConfig) {
