@@ -37,6 +37,12 @@ public:
         uint32_t height
     ) = 0;
 
+    /// Set blur strength
+    virtual void SetStrength(float strength) = 0;
+
+    /// Set tint color
+    virtual void SetColor(float r, float g, float b, float a) = 0;
+
     /// Set effect parameters from JSON
     /// @param json JSON parameter string
     /// @return true on success

@@ -9,12 +9,16 @@ namespace blurwindow {
 // Kawase blur shader (HLSL embedded)
 static const char* g_KawaseBlurPS = R"(
 Texture2D inputTexture : register(t0);
+Texture2D originalTexture : register(t1);
 SamplerState linearSampler : register(s0);
 
 cbuffer KawaseParams : register(b0) {
     float2 texelSize;
     float offset;
-    float padding;
+    float isFinalPass;
+    float strength;
+    float3 padding;
+    float4 tintColor;
 };
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
@@ -30,7 +34,22 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     color += inputTexture.Sample(linearSampler, texcoord + float2(-dUV.x + halfTexel.x,  dUV.y + halfTexel.y));
     color += inputTexture.Sample(linearSampler, texcoord + float2( dUV.x + halfTexel.x,  dUV.y + halfTexel.y));
     
-    return color * 0.25f;
+    float4 blurred = color * 0.25f;
+    
+    if (isFinalPass > 0.5f) {
+        // Get original pixel from t1 (the actual captured image)
+        float4 original = originalTexture.Sample(linearSampler, texcoord);
+        
+        // Apply strength as blend factor between original and blurred
+        float4 result = lerp(original, blurred, strength);
+        
+        // Apply tint using lerp (not additive to prevent white accumulation)
+        result.rgb = lerp(result.rgb, tintColor.rgb, tintColor.a);
+        
+        return result;
+    }
+    
+    return blurred;
 }
 )";
 
@@ -112,13 +131,17 @@ public:
                 currentOutput = m_pingPongRTVs[i % 2].Get();
             }
 
-            // Update offset for this iteration
+            // Update offset for this iteration (strength is applied in shader, not here)
             float iterationOffset = m_offset + static_cast<float>(i);
-            UpdateConstantBuffer(context, width, height, iterationOffset);
+            UpdateConstantBuffer(context, width, height, iterationOffset, isLast ? 1.0f : 0.0f);
 
             // Set shader state
             context->PSSetShader(m_kawasePS.Get(), nullptr, 0);
             context->PSSetShaderResources(0, 1, &currentInput);
+            // Bind original image to t1 for final pass strength blending
+            if (isLast) {
+                context->PSSetShaderResources(1, 1, &input);
+            }
             context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
             context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
             context->OMSetRenderTargets(1, &currentOutput, nullptr);
@@ -135,8 +158,8 @@ public:
         }
 
         // Cleanup
-        ID3D11ShaderResourceView* nullSRV = nullptr;
-        context->PSSetShaderResources(0, 1, &nullSRV);
+        ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
+        context->PSSetShaderResources(0, 2, nullSRVs);
 
         return true;
     }
@@ -158,24 +181,40 @@ public:
         m_iterations = (std::max)(1, (std::min)(iterations, 8));
     }
 
-    void SetOffset(float offset) {
-        m_offset = (std::max)(0.0f, offset);
+    void SetStrength(float strength) override {
+        m_strength = std::clamp(strength, 0.0f, 1.0f);
+    }
+
+    void SetColor(float r, float g, float b, float a) override {
+        m_tintColor[0] = r;
+        m_tintColor[1] = g;
+        m_tintColor[2] = b;
+        m_tintColor[3] = a;
     }
 
 private:
     struct KawaseParams {
         float texelSize[2];
         float offset;
-        float padding;
+        float isFinalPass;
+        float strength;
+        float padding[3];
+        float tintColor[4];
     };
 
-    void UpdateConstantBuffer(ID3D11DeviceContext* context, uint32_t width, uint32_t height, float offset) {
+    void UpdateConstantBuffer(ID3D11DeviceContext* context, uint32_t width, uint32_t height, float offset, float isFinalPass) {
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (SUCCEEDED(context->Map(m_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
             KawaseParams* params = static_cast<KawaseParams*>(mapped.pData);
             params->texelSize[0] = 1.0f / width;
             params->texelSize[1] = 1.0f / height;
             params->offset = offset;
+            params->isFinalPass = isFinalPass;
+            params->strength = m_strength;
+            params->tintColor[0] = m_tintColor[0];
+            params->tintColor[1] = m_tintColor[1];
+            params->tintColor[2] = m_tintColor[2];
+            params->tintColor[3] = m_tintColor[3];
             context->Unmap(m_constantBuffer.Get(), 0);
         }
     }
@@ -223,6 +262,8 @@ private:
 
     int m_iterations = 4;
     float m_offset = 1.0f;
+    float m_strength = 1.0f;
+    float m_tintColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 };
 
 // Factory function

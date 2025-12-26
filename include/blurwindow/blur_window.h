@@ -36,6 +36,17 @@ public:
     /// Get current quality preset
     QualityPreset GetPreset() const;
 
+    /// Set blur strength
+    /// @param strength Blur strength (0.0 to 1.0)
+    void SetBlurStrength(float strength);
+
+    /// Set blur tint color
+    /// @param r Red component (0.0 to 1.0)
+    /// @param g Green component (0.0 to 1.0)
+    /// @param b Blue component (0.0 to 1.0)
+    /// @param a Alpha component (0.0 to 1.0)
+    void SetBlurColor(float r, float g, float b, float a);
+
     /// Enable/disable click-through
     /// @param enable true to enable click-through
     void SetClickThrough(bool enable);
