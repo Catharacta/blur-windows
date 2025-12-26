@@ -1,4 +1,5 @@
 #include "ICaptureSubsystem.h"
+#include "../core/Logger.h"
 #include <dxgi1_2.h>
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -31,23 +32,33 @@ public:
         m_device = device;
         m_device->GetImmediateContext(m_context.GetAddressOf());
 
+        LOG_INFO("Initializing DXGI capture...");
+
         // Get DXGI device
         ComPtr<IDXGIDevice> dxgiDevice;
         HRESULT hr = m_device->QueryInterface(IID_PPV_ARGS(dxgiDevice.GetAddressOf()));
-        if (FAILED(hr)) return false;
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to query IDXGIDevice from D3D11 device (0x%08X).", hr);
+            return false;
+        }
 
         // Get adapter
         hr = dxgiDevice->GetAdapter(m_adapter.GetAddressOf());
-        if (FAILED(hr)) return false;
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to get adapter from DXGI device (0x%08X).", hr);
+            return false;
+        }
 
         // Enumerate all outputs (monitors)
         EnumerateMonitors();
 
         // Initialize duplication for primary monitor first
         if (!m_monitors.empty()) {
+            LOG_INFO("Primary monitor found. Initializing duplication...");
             return InitializeDuplicationForMonitor(0);
         }
 
+        LOG_ERROR("No monitors found to capture.");
         return false;
     }
 
@@ -75,7 +86,7 @@ public:
         DXGI_OUTDUPL_FRAME_INFO frameInfo;
         
         HRESULT hr = m_duplication->AcquireNextFrame(
-            0,  // 0ms timeout - non-blocking
+            0,  // Strictly non-blocking to prevent any UI hang
             &frameInfo,
             desktopResource.GetAddressOf()
         );
@@ -86,17 +97,19 @@ public:
                 *outTexture = m_cachedTexture.Get();
                 return true;
             }
+            // First frame timeout is common if nothing moves
             return false;
         }
 
         if (hr == DXGI_ERROR_ACCESS_LOST) {
-            // Need to reinitialize
+            LOG_WARN("DXGI Desktop Duplication access lost. Reinitializing...");
             m_initialized = false;
             InitializeDuplicationForMonitor(m_currentMonitorIndex);
             return false;
         }
 
         if (FAILED(hr)) {
+            LOG_ERROR("AcquireNextFrame failed (0x%08X).", hr);
             return false;
         }
 

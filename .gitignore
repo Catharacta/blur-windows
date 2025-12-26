@@ -33,3 +33,7 @@ cmake-build-*/
 # OS
 Thumbs.db
 .DS_Store
+
+# Rust
+target/
+**/target/

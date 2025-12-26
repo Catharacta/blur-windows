@@ -78,7 +78,6 @@ public:
         return nullptr;
     }
 
-private:
     static PipelineConfig ParsePipelineJson(const std::string& json) {
         PipelineConfig config;
         

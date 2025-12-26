@@ -1,5 +1,5 @@
-#include "blurwindow/blurwindow.h"
 #include "blurwindow/blur_window.h"
+#include "Logger.h"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <vector>
@@ -66,7 +66,22 @@ public:
         }
 
         m_initialized = true;
+        
+        // Sync options with Logger
+        Logger::Instance().Enable(m_options.enableLogging);
+        if (m_options.logPath) Logger::Instance().SetOutputPath(m_options.logPath);
+        if (m_options.logCallback) Logger::Instance().SetCallback(m_options.logCallback);
+
         return true;
+    }
+
+    void SetOptions(const BlurSystemOptions& opts) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_options = opts;
+        
+        Logger::Instance().Enable(m_options.enableLogging);
+        if (m_options.logPath) Logger::Instance().SetOutputPath(m_options.logPath);
+        if (m_options.logCallback) Logger::Instance().SetCallback(m_options.logCallback);
     }
 
     void Shutdown() {
@@ -131,6 +146,10 @@ bool BlurSystem::Initialize(const BlurSystemOptions& opts) {
 
 void BlurSystem::Shutdown() {
     m_impl->Shutdown();
+}
+
+void BlurSystem::SetOptions(const BlurSystemOptions& opts) {
+    m_impl->SetOptions(opts);
 }
 
 bool BlurSystem::IsInitialized() const {

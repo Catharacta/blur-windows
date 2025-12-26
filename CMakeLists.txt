@@ -112,6 +112,9 @@ target_include_directories(blurwindow PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+target_include_directories(blurwindow PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
 target_include_directories(blurwindow_static PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

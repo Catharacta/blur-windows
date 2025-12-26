@@ -29,19 +29,39 @@ HWND g_hStatusText = NULL;
 #define ID_BTN_BALANCED 1022
 #define ID_BTN_PERF     1023
 #define ID_BTN_MINIMAL  1024
+ 
+#define WM_APP_LOG      (WM_APP + 1)
 
 // Helper to log message to the GUI
 void AppendLog(const std::wstring& msg) {
-    if (g_hLogEdit) {
-        int len = GetWindowTextLength(g_hLogEdit);
-        SendMessage(g_hLogEdit, EM_SETSEL, (WPARAM)len, (LPARAM)len);
-        SendMessage(g_hLogEdit, EM_REPLACESEL, 0, (LPARAM)(msg + L"\r\n").c_str());
+    if (g_hLogEdit && IsWindow(g_hLogEdit)) {
+        std::wstring* pMsg = new std::wstring(msg);
+        if (!PostMessage(GetParent(g_hLogEdit), WM_APP_LOG, 0, (LPARAM)pMsg)) {
+            delete pMsg;
+        }
     }
 }
 
 void UpdateStatus(const std::wstring& status) {
     if (g_hStatusText) {
         SetWindowText(g_hStatusText, status.c_str());
+    }
+}
+
+// Log callback for the library
+void OnLibraryLog(const char* message) {
+    // Convert to wstring and append
+    int len = MultiByteToWideChar(CP_UTF8, 0, message, -1, NULL, 0);
+    if (len > 0) {
+        std::vector<wchar_t> buf(len);
+        MultiByteToWideChar(CP_UTF8, 0, message, -1, buf.data(), len);
+        // Prefix with [LIB] to distinguish
+        std::wstring msg = L"[LIB] ";
+        msg += buf.data();
+        // The library already adds \n, but AppendLog adds \r\n
+        // Remove trailing \n if present
+        if (!msg.empty() && msg.back() == L'\n') msg.pop_back();
+        AppendLog(msg);
     }
 }
 
@@ -71,24 +91,35 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateWindow(L"BUTTON", L"Performance", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x + 220, y, 100, 30, hwnd, (HMENU)ID_BTN_PERF, NULL, NULL);
         CreateWindow(L"BUTTON", L"Minimal", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x + 330, y, 100, 30, hwnd, (HMENU)ID_BTN_MINIMAL, NULL, NULL);
 
-        y += 50;
-        CreateWindow(L"STATIC", L"Status:", WS_VISIBLE | WS_CHILD, x, y, 100, 20, hwnd, NULL, NULL, NULL);
-        g_hStatusText = CreateWindow(L"STATIC", L"Ready", WS_VISIBLE | WS_CHILD, x + 60, y, 300, 20, hwnd, NULL, NULL, NULL);
+        y += 40;
+        CreateWindow(L"STATIC", L"Status:", WS_VISIBLE | WS_CHILD, x, y, 60, 20, hwnd, NULL, NULL, NULL);
+        g_hStatusText = CreateWindow(L"STATIC", L"Ready", WS_VISIBLE | WS_CHILD, x + 70, y, 300, 20, hwnd, NULL, NULL, NULL);
 
-        y += 30;
+        y += 25;
         CreateWindow(L"STATIC", L"Logs:", WS_VISIBLE | WS_CHILD, x, y, 100, 20, hwnd, NULL, NULL, NULL);
         y += 25;
         g_hLogEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", 
             WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL, 
-            x, y, 560, 250, hwnd, NULL, NULL, NULL);
+            x, y, 560, 150, hwnd, NULL, NULL, NULL);
 
-        // Initialize library
+        // Initialize library with callback
         BlurSystemOptions opts;
         opts.enableLogging = true;
+        opts.logCallback = OnLibraryLog;
         if (!BlurSystem::Instance().Initialize(opts)) {
             AppendLog(L"Error: Failed to initialize BlurSystem");
         } else {
             AppendLog(L"BlurSystem initialized.");
+        }
+        return 0;
+    }
+    case WM_APP_LOG: {
+        std::unique_ptr<std::wstring> pMsg((std::wstring*)lParam);
+        if (g_hLogEdit && pMsg) {
+            int len = GetWindowTextLength(g_hLogEdit);
+            SendMessage(g_hLogEdit, EM_SETSEL, (WPARAM)len, (LPARAM)len);
+            SendMessage(g_hLogEdit, EM_REPLACESEL, 0, (LPARAM)(*pMsg + L"\r\n").c_str());
+            SendMessage(g_hLogEdit, EM_SCROLLCARET, 0, 0);
         }
         return 0;
     }
@@ -98,14 +129,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case ID_BTN_START:
             if (!g_blurWindow) {
                 WindowOptions winOpts;
-                winOpts.bounds = { 100, 100, 600, 500 };
+                winOpts.bounds = { 200, 200, 700, 600 };
                 winOpts.topMost = true;
                 g_blurWindow = BlurSystem::Instance().CreateBlurWindow(NULL, winOpts);
                 if (g_blurWindow) {
-                    ShowWindow(g_blurWindow->GetHWND(), SW_SHOW);
+                    AppendLog(L"BlurWindow created. Starting graphics...");
                     g_blurWindow->Start();
-                    AppendLog(L"BlurWindow started.");
-                    UpdateStatus(L"Running");
+                    
+                    if (g_blurWindow->IsInitialized()) {
+                        ShowWindow(g_blurWindow->GetHWND(), SW_SHOW);
+                        AppendLog(L"BlurWindow started and initialized successfully.");
+                        UpdateStatus(L"Running");
+                    } else {
+                        AppendLog(L"Error: Graphics initialization failed in Start().");
+                        AppendLog(L"See [LIB] logs for details.");
+                        UpdateStatus(L"Init Failed");
+                    }
                 } else {
                     AppendLog(L"Error: Failed to create BlurWindow.");
                 }
@@ -120,21 +159,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
             break;
         case ID_BTN_GAUSSIAN:
-            if (g_blurWindow) {
-                g_blurWindow->SetEffectPipeline("{\"pipeline\": [{\"type\": \"gaussian\"}]}");
-                AppendLog(L"Effect: Gaussian");
-            }
-            break;
         case ID_BTN_KAWASE:
-            if (g_blurWindow) {
-                g_blurWindow->SetEffectPipeline("{\"pipeline\": [{\"type\": \"kawase\"}]}");
-                AppendLog(L"Effect: Kawase");
-            }
-            break;
         case ID_BTN_BOX:
             if (g_blurWindow) {
-                g_blurWindow->SetEffectPipeline("{\"pipeline\": [{\"type\": \"box\"}]}");
-                AppendLog(L"Effect: Box");
+                const char* config = nullptr;
+                const wchar_t* name = nullptr;
+                if (wmId == ID_BTN_GAUSSIAN) { config = "{\"pipeline\": [{\"type\": \"gaussian\"}]}"; name = L"Gaussian"; }
+                else if (wmId == ID_BTN_KAWASE) { config = "{\"pipeline\": [{\"type\": \"kawase\"}]}"; name = L"Kawase"; }
+                else if (wmId == ID_BTN_BOX) { config = "{\"pipeline\": [{\"type\": \"box\"}]}"; name = L"Box"; }
+
+                if (g_blurWindow->SetEffectPipeline(config)) {
+                    AppendLog(std::wstring(L"Effect set to ") + name);
+                    // Force start if not running (recovery logic)
+                    if (!g_blurWindow->IsRunning()) {
+                        AppendLog(L"Trying to start/show window...");
+                        ShowWindow(g_blurWindow->GetHWND(), SW_SHOW);
+                        g_blurWindow->Start();
+                        if (g_blurWindow->IsInitialized()) {
+                            UpdateStatus(L"Running");
+                        } else {
+                            UpdateStatus(L"Init Failed");
+                        }
+                    }
+                } else {
+                    AppendLog(std::wstring(L"Error: Failed to set ") + name + L" effect");
+                }
             }
             break;
         case ID_BTN_HIGH:

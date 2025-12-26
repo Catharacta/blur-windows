@@ -49,6 +49,7 @@ struct WindowOptions {
 struct BlurSystemOptions {
     bool enableLogging = false;           ///< Enable logging
     const char* logPath = nullptr;        ///< Log file path (nullptr for console)
+    void (*logCallback)(const char* message) = nullptr; ///< Optional log callback
     QualityPreset defaultPreset = QualityPreset::Balanced; ///< Default quality preset
 };
 
@@ -65,6 +66,9 @@ public:
 
     /// Shutdown the blur system
     void Shutdown();
+
+    /// Update system options
+    void SetOptions(const BlurSystemOptions& opts);
 
     /// Check if system is initialized
     bool IsInitialized() const;
