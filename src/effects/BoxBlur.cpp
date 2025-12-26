@@ -9,19 +9,21 @@ namespace blurwindow {
 // Box blur shader (HLSL embedded)
 static const char* g_BoxBlurPS = R"(
 Texture2D inputTexture : register(t0);
+Texture2D originalTexture : register(t1);
 SamplerState linearSampler : register(s0);
 
 cbuffer BoxParams : register(b0) {
     float2 texelSize;
     int radius;
-    float padding;
+    float strength;
+    float4 tintColor;
 };
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
     float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float count = 0.0f;
     
-    // Simple box kernel sampling
+    // Always use full radius for blur calculation
     for (int x = -radius; x <= radius; x++) {
         for (int y = -radius; y <= radius; y++) {
             float2 offset = float2(float(x), float(y)) * texelSize;
@@ -30,7 +32,18 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
         }
     }
     
-    return color / count;
+    float4 blurred = color / count;
+    
+    // Get original pixel from t1 (same as input for single-pass)
+    float4 original = originalTexture.Sample(linearSampler, texcoord);
+    
+    // Apply strength as blend factor between original and blurred
+    float4 result = lerp(original, blurred, strength);
+    
+    // Apply tint using lerp (not additive to prevent white accumulation)
+    result.rgb = lerp(result.rgb, tintColor.rgb, tintColor.a);
+    
+    return result;
 }
 )";
 
@@ -65,7 +78,7 @@ public:
 
         // Create constant buffer (16-byte aligned)
         D3D11_BUFFER_DESC cbDesc = {};
-        cbDesc.ByteWidth = 16;  // float2 + int + float padding
+        cbDesc.ByteWidth = sizeof(BoxParams);
         cbDesc.Usage = D3D11_USAGE_DYNAMIC;
         cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -104,6 +117,8 @@ public:
         // Set shader state
         context->PSSetShader(m_boxPS.Get(), nullptr, 0);
         context->PSSetShaderResources(0, 1, &input);
+        // Bind input also to t1 for original texture reference
+        context->PSSetShaderResources(1, 1, &input);
         context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
         context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
         context->OMSetRenderTargets(1, &output, nullptr);
@@ -112,8 +127,8 @@ public:
         m_fullscreenRenderer->DrawFullscreen(context);
 
         // Cleanup
-        ID3D11ShaderResourceView* nullSRV = nullptr;
-        context->PSSetShaderResources(0, 1, &nullSRV);
+        ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
+        context->PSSetShaderResources(0, 2, nullSRVs);
 
         return true;
     }
@@ -133,20 +148,37 @@ public:
         m_radius = (std::max)(1, (std::min)(radius, 10));
     }
 
+    void SetStrength(float strength) override {
+        m_strength = std::clamp(strength, 0.0f, 1.0f);
+    }
+
+    void SetColor(float r, float g, float b, float a) override {
+        m_tintColor[0] = r;
+        m_tintColor[1] = g;
+        m_tintColor[2] = b;
+        m_tintColor[3] = a;
+    }
+
 private:
     struct BoxParams {
         float texelSize[2];
         int radius;
-        float padding;
+        float strength;
+        float tintColor[4];
     };
 
     void UpdateConstantBuffer(ID3D11DeviceContext* context, uint32_t width, uint32_t height) {
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (SUCCEEDED(context->Map(m_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
             BoxParams* params = static_cast<BoxParams*>(mapped.pData);
-            params->texelSize[0] = 1.0f / width;
-            params->texelSize[1] = 1.0f / height;
+            params->texelSize[0] = 1.0f / (float)width;
+            params->texelSize[1] = 1.0f / (float)height;
             params->radius = m_radius;
+            params->strength = m_strength;
+            params->tintColor[0] = m_tintColor[0];
+            params->tintColor[1] = m_tintColor[1];
+            params->tintColor[2] = m_tintColor[2];
+            params->tintColor[3] = m_tintColor[3];
             context->Unmap(m_constantBuffer.Get(), 0);
         }
     }
@@ -160,6 +192,8 @@ private:
     std::unique_ptr<FullscreenRenderer> m_fullscreenRenderer;
 
     int m_radius = 3;
+    float m_strength = 1.0f;
+    float m_tintColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 };
 
 // Factory function

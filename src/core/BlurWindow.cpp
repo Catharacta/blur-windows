@@ -3,7 +3,6 @@
 #include "Logger.h"
 #include "SubsystemFactory.h"
 #include "FullscreenRenderer.h"
-#include "config/ConfigManager.h"
 #include <atomic>
 #include <chrono>
 #include <mutex>
@@ -22,6 +21,7 @@ public:
         , m_preset(QualityPreset::Balanced)
         , m_running(false)
         , m_currentFPS(0.0f)
+        , m_currentStrength(1.0f)
         , m_useDirectComp(false)
     {
         // Don't initialize graphics in constructor
@@ -135,17 +135,37 @@ public:
     }
 
     bool SetEffectPipeline(const std::string& jsonConfig) {
-        auto config = ConfigManager::ParsePipelineJson(jsonConfig);
-        if (config.effects.empty()) return false;
+        // Simple dispatcher based on JSON type field for now
+        EffectType type = EffectType::Gaussian;
+        if (jsonConfig.find("\"kawase\"") != std::string::npos) type = EffectType::Kawase;
+        else if (jsonConfig.find("\"box\"") != std::string::npos) type = EffectType::Box;
 
-        auto newEffect = ConfigManager::CreateEffect(config.effects[0].type);
+        auto newEffect = SubsystemFactory::CreateEffect(type);
         if (newEffect && newEffect->Initialize(m_device)) {
             std::lock_guard<std::mutex> lock(m_graphicsMutex);
+            // Preserve current strength and apply to new effect
+            newEffect->SetStrength(m_currentStrength);
             m_effect = std::move(newEffect);
             m_graphicsInitialized = (m_capture && m_effect && m_presenter);
             return true;
         }
         return false;
+    }
+
+    void SetBlurStrength(float strength) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        m_currentStrength = strength;
+        LOG_INFO("SetBlurStrength: %.2f", strength);
+        if (m_effect) {
+            m_effect->SetStrength(strength);
+        }
+    }
+
+    void SetBlurColor(float r, float g, float b, float a) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        if (m_effect) {
+            m_effect->SetColor(r, g, b, a);
+        }
     }
 
     bool IsInitialized() const {
@@ -199,7 +219,6 @@ private:
                 LOG_INFO("Capture initialized.");
             }
         }
-        
         // 2. Initialize effect
         m_effect = SubsystemFactory::CreateEffect(EffectType::Gaussian);
         if (m_effect) {
@@ -341,6 +360,12 @@ private:
             GetModuleHandleW(nullptr),
             nullptr
         );
+        
+        // Exclude blur window from screen capture (Windows 10 2004+)
+        // This prevents infinite recursion where the blur window captures itself
+        if (m_hwnd) {
+            SetWindowDisplayAffinity(m_hwnd, WDA_EXCLUDEFROMCAPTURE);
+        }
     }
 
     void DestroyBlurWindow() {
@@ -488,6 +513,7 @@ private:
     std::thread m_renderThread;
     std::atomic<bool> m_running;
     std::atomic<float> m_currentFPS;
+    float m_currentStrength = 1.0f;
 
     // Graphics resources
     ID3D11Device* m_device = nullptr;
@@ -558,6 +584,14 @@ void BlurWindow::SetPreset(QualityPreset preset) {
 
 QualityPreset BlurWindow::GetPreset() const {
     return m_impl->GetPreset();
+}
+
+void BlurWindow::SetBlurStrength(float strength) {
+    m_impl->SetBlurStrength(strength);
+}
+
+void BlurWindow::SetBlurColor(float r, float g, float b, float a) {
+    m_impl->SetBlurColor(r, g, b, a);
 }
 
 void BlurWindow::SetClickThrough(bool enable) {

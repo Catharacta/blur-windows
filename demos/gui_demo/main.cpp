@@ -29,6 +29,11 @@ HWND g_hStatusText = NULL;
 #define ID_BTN_BALANCED 1022
 #define ID_BTN_PERF     1023
 #define ID_BTN_MINIMAL  1024
+#define ID_SLIDER_STRENGTH 1031
+#define ID_BTN_COLOR    1032
+#define ID_COMBO_EFFECT 1041
+
+HWND g_hComboEffect = NULL;
  
 #define WM_APP_LOG      (WM_APP + 1)
 
@@ -77,21 +82,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateWindow(L"BUTTON", L"Stop", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x + 90, y, 80, 30, hwnd, (HMENU)ID_BTN_STOP, NULL, NULL);
         
         y += 40;
-        CreateWindow(L"STATIC", L"Effects:", WS_VISIBLE | WS_CHILD, x, y, 100, 20, hwnd, NULL, NULL, NULL);
-        y += 30;
-        CreateWindow(L"BUTTON", L"Gaussian", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x, y, 80, 30, hwnd, (HMENU)ID_BTN_GAUSSIAN, NULL, NULL);
-        CreateWindow(L"BUTTON", L"Kawase", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x + 90, y, 80, 30, hwnd, (HMENU)ID_BTN_KAWASE, NULL, NULL);
-        CreateWindow(L"BUTTON", L"Box", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x + 180, y, 80, 30, hwnd, (HMENU)ID_BTN_BOX, NULL, NULL);
+        CreateWindow(L"STATIC", L"Effect:", WS_VISIBLE | WS_CHILD, x, y, 60, 20, hwnd, NULL, NULL, NULL);
+        g_hComboEffect = CreateWindow(WC_COMBOBOX, L"",
+            WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
+            x + 70, y, 150, 200, hwnd, (HMENU)ID_COMBO_EFFECT, NULL, NULL);
+        SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Gaussian");
+        SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Box");
+        SendMessage(g_hComboEffect, CB_SETCURSEL, 0, 0);
 
         y += 40;
-        CreateWindow(L"STATIC", L"Quality:", WS_VISIBLE | WS_CHILD, x, y, 100, 20, hwnd, NULL, NULL, NULL);
-        y += 30;
-        CreateWindow(L"BUTTON", L"High", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x, y, 100, 30, hwnd, (HMENU)ID_BTN_HIGH, NULL, NULL);
-        CreateWindow(L"BUTTON", L"Balanced", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x + 110, y, 100, 30, hwnd, (HMENU)ID_BTN_BALANCED, NULL, NULL);
-        CreateWindow(L"BUTTON", L"Performance", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x + 220, y, 100, 30, hwnd, (HMENU)ID_BTN_PERF, NULL, NULL);
-        CreateWindow(L"BUTTON", L"Minimal", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x + 330, y, 100, 30, hwnd, (HMENU)ID_BTN_MINIMAL, NULL, NULL);
+        CreateWindow(L"STATIC", L"Strength (0-100):", WS_VISIBLE | WS_CHILD, x, y, 120, 20, hwnd, NULL, NULL, NULL);
+        HWND hSlider = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 30, hwnd, (HMENU)ID_SLIDER_STRENGTH, NULL, NULL);
+        SendMessage(hSlider, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+        SendMessage(hSlider, TBM_SETPOS, TRUE, 100);
 
-        y += 40;
+        y += 45;
         CreateWindow(L"STATIC", L"Status:", WS_VISIBLE | WS_CHILD, x, y, 60, 20, hwnd, NULL, NULL, NULL);
         g_hStatusText = CreateWindow(L"STATIC", L"Ready", WS_VISIBLE | WS_CHILD, x + 70, y, 300, 20, hwnd, NULL, NULL, NULL);
 
@@ -129,7 +135,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case ID_BTN_START:
             if (!g_blurWindow) {
                 WindowOptions winOpts;
-                winOpts.bounds = { 200, 200, 700, 600 };
+                winOpts.bounds = { 620, 100, 1120, 500 };
                 winOpts.topMost = true;
                 g_blurWindow = BlurSystem::Instance().CreateBlurWindow(NULL, winOpts);
                 if (g_blurWindow) {
@@ -138,7 +144,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     
                     if (g_blurWindow->IsInitialized()) {
                         ShowWindow(g_blurWindow->GetHWND(), SW_SHOW);
-                        AppendLog(L"BlurWindow started and initialized successfully.");
+                        AppendLog(L"BlurWindow started (Gaussian effect).");
                         UpdateStatus(L"Running");
                     } else {
                         AppendLog(L"Error: Graphics initialization failed in Start().");
@@ -158,58 +164,34 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 UpdateStatus(L"Stopped");
             }
             break;
-        case ID_BTN_GAUSSIAN:
-        case ID_BTN_KAWASE:
-        case ID_BTN_BOX:
+        }
+        // Handle ComboBox selection change
+        if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == ID_COMBO_EFFECT) {
             if (g_blurWindow) {
-                const char* config = nullptr;
-                const wchar_t* name = nullptr;
-                if (wmId == ID_BTN_GAUSSIAN) { config = "{\"pipeline\": [{\"type\": \"gaussian\"}]}"; name = L"Gaussian"; }
-                else if (wmId == ID_BTN_KAWASE) { config = "{\"pipeline\": [{\"type\": \"kawase\"}]}"; name = L"Kawase"; }
-                else if (wmId == ID_BTN_BOX) { config = "{\"pipeline\": [{\"type\": \"box\"}]}"; name = L"Box"; }
-
-                if (g_blurWindow->SetEffectPipeline(config)) {
-                    AppendLog(std::wstring(L"Effect set to ") + name);
-                    // Force start if not running (recovery logic)
-                    if (!g_blurWindow->IsRunning()) {
-                        AppendLog(L"Trying to start/show window...");
-                        ShowWindow(g_blurWindow->GetHWND(), SW_SHOW);
-                        g_blurWindow->Start();
-                        if (g_blurWindow->IsInitialized()) {
-                            UpdateStatus(L"Running");
-                        } else {
-                            UpdateStatus(L"Init Failed");
-                        }
+                int sel = (int)SendMessage(g_hComboEffect, CB_GETCURSEL, 0, 0);
+                const char* configs[] = {
+                    "{\"pipeline\": [{\"type\": \"gaussian\"}]}",
+                    "{\"pipeline\": [{\"type\": \"box\"}]}"
+                };
+                const wchar_t* names[] = { L"Gaussian", L"Box" };
+                if (sel >= 0 && sel < 2) {
+                    if (g_blurWindow->SetEffectPipeline(configs[sel])) {
+                        AppendLog(std::wstring(L"Effect changed to ") + names[sel]);
+                    } else {
+                        AppendLog(std::wstring(L"Error: Failed to set ") + names[sel] + L" effect");
                     }
-                } else {
-                    AppendLog(std::wstring(L"Error: Failed to set ") + name + L" effect");
                 }
             }
-            break;
-        case ID_BTN_HIGH:
-            if (g_blurWindow) {
-                g_blurWindow->SetPreset(QualityPreset::High);
-                AppendLog(L"Preset: High");
-            }
-            break;
-        case ID_BTN_BALANCED:
-            if (g_blurWindow) {
-                g_blurWindow->SetPreset(QualityPreset::Balanced);
-                AppendLog(L"Preset: Balanced");
-            }
-            break;
-        case ID_BTN_PERF:
-            if (g_blurWindow) {
-                g_blurWindow->SetPreset(QualityPreset::Performance);
-                AppendLog(L"Preset: Performance");
-            }
-            break;
-        case ID_BTN_MINIMAL:
-            if (g_blurWindow) {
-                g_blurWindow->SetPreset(QualityPreset::Minimal);
-                AppendLog(L"Preset: Minimal");
-            }
-            break;
+        }
+        return 0;
+    }
+    case WM_HSCROLL: {
+        if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_STRENGTH)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_blurWindow->SetBlurStrength(pos / 100.0f);
+            wchar_t buf[64];
+            swprintf_s(buf, L"Strength: %d%% (0=transparent, 100=full blur)", pos);
+            AppendLog(buf);
         }
         return 0;
     }
@@ -246,7 +228,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     HWND hwnd = CreateWindowEx(
         0, CLASS_NAME, L"BlurWindow Library GUI Demo",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 600, 500,
+        CW_USEDEFAULT, CW_USEDEFAULT, 600, 550,
         NULL, NULL, hInstance, NULL
     );
 
