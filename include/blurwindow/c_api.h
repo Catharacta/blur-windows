@@ -2,37 +2,44 @@
 
 #include <cstdint>
 
-/// @file c_api.h
-/// @brief C ABI wrapper for Rust/FFI interoperability
+/**
+ * @file c_api.h
+ * @brief C ABI wrapper for Rust/FFI interoperability.
+ * 
+ * Provides a stable C interface for the BlurWindow library, allowing it to be used
+ * from managed languages (C#, Python) or other native languages (Rust, Go).
+ */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Handle types
+/// Opaque handle to the global blur system.
 typedef void* BlurSystemHandle;
+
+/// Opaque handle to a specific blur window instance.
 typedef void* BlurWindowHandle;
 
-// Quality preset enum (C compatible)
+/// Quality preset levels for the blur renderer.
 typedef enum {
-    BLUR_PRESET_HIGH = 0,
-    BLUR_PRESET_BALANCED = 1,
-    BLUR_PRESET_PERFORMANCE = 2,
-    BLUR_PRESET_MINIMAL = 3
+    BLUR_PRESET_HIGH = 0,         ///< High quality, multi-pass rendering.
+    BLUR_PRESET_BALANCED = 1,     ///< Balanced quality and performance.
+    BLUR_PRESET_PERFORMANCE = 2,  ///< Optimized for performance.
+    BLUR_PRESET_MINIMAL = 3       ///< Minimum overhead.
 } BlurQualityPreset;
 
-// Error codes
+/// Error codes returned by API functions.
 typedef enum {
-    BLUR_OK = 0,
-    BLUR_ERROR_NOT_INITIALIZED = -1,
-    BLUR_ERROR_INVALID_HANDLE = -2,
-    BLUR_ERROR_INVALID_PARAMETER = -3,
-    BLUR_ERROR_D3D11_FAILED = -4,
-    BLUR_ERROR_CAPTURE_FAILED = -5,
-    BLUR_ERROR_UNKNOWN = -99
+    BLUR_OK = 0,                         ///< Success.
+    BLUR_ERROR_NOT_INITIALIZED = -1,     ///< System not initialized.
+    BLUR_ERROR_INVALID_HANDLE = -2,      ///< Handle is NULL or invalid.
+    BLUR_ERROR_INVALID_PARAMETER = -3,   ///< One or more parameters are invalid.
+    BLUR_ERROR_D3D11_FAILED = -4,        ///< Direct3D 11 operation failed.
+    BLUR_ERROR_CAPTURE_FAILED = -5,      ///< Desktop capture failed.
+    BLUR_ERROR_UNKNOWN = -99             ///< An unexpected error occurred.
 } BlurErrorCode;
 
-// Rect structure (C compatible)
+/// Rect structure for window bounds.
 typedef struct {
     int32_t left;
     int32_t top;
@@ -40,19 +47,19 @@ typedef struct {
     int32_t bottom;
 } BlurRect;
 
-// System options (C compatible)
+/// Global system configuration options.
 typedef struct {
-    int32_t enableLogging;     // 0 = false, 1 = true
-    const char* logPath;       // NULL for console
-    BlurQualityPreset defaultPreset;
+    int32_t enableLogging;               ///< 0 = false, 1 = true.
+    const char* logPath;                 ///< Path to log file (NULL for console).
+    BlurQualityPreset defaultPreset;     ///< Default quality level.
 } BlurSystemOptionsC;
 
-// Window options (C compatible)
+/// Per-window creation options.
 typedef struct {
-    void* owner;               // HWND
-    BlurRect bounds;
-    int32_t topMost;           // 0 = false, 1 = true
-    int32_t clickThrough;      // 0 = false, 1 = true
+    void* owner;                         ///< Parent HWND (can be NULL).
+    BlurRect bounds;                     ///< Initial window position and size.
+    int32_t topMost;                     ///< 1 to stay on top of other windows.
+    int32_t clickThrough;                ///< 1 to allow mouse clicks to pass through.
 } BlurWindowOptionsC;
 
 #ifndef BLURWINDOW_API
@@ -67,98 +74,162 @@ typedef struct {
 #endif
 #endif
 
-/// Initialize the blur system
-/// @param opts System options (can be NULL for defaults)
-/// @return System handle, or NULL on failure
+/**
+ * @brief Initialize the global blur system.
+ * @param opts Configuration options (NULL for defaults).
+ * @return Handle to the system, or NULL on failure.
+ */
 BLURWINDOW_API BlurSystemHandle blur_init(const BlurSystemOptionsC* opts);
 
-/// Shutdown the blur system
-/// @param sys System handle
+/**
+ * @brief Shutdown the blur system and release resources.
+ * @param sys System handle returned by blur_init.
+ */
 BLURWINDOW_API void blur_shutdown(BlurSystemHandle sys);
 
-/// Create a blur window
-/// @param sys System handle
-/// @param owner Owner window handle (HWND)
-/// @param opts Window options
-/// @return Window handle, or NULL on failure
+/**
+ * @brief Create a new blur window.
+ * @param sys System handle.
+ * @param owner Parent window handle (HWND).
+ * @param opts Window creation options.
+ * @return Handle to the window, or NULL on failure.
+ */
 BLURWINDOW_API BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* owner, const BlurWindowOptionsC* opts);
 
-/// Destroy a blur window
-/// @param window Window handle
+/**
+ * @brief Destroy a blur window.
+ * @param window Window handle.
+ */
 BLURWINDOW_API void blur_destroy_window(BlurWindowHandle window);
 
-/// Start blur effect
-/// @param window Window handle
-/// @return Error code
+/**
+ * @brief Start rendering the blur effect.
+ * @param window Window handle.
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_start(BlurWindowHandle window);
 
-/// Stop blur effect
-/// @param window Window handle
-/// @return Error code
+/**
+ * @brief Stop rendering the blur effect.
+ * @param window Window handle.
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_stop(BlurWindowHandle window);
 
-/// Set quality preset
-/// @param window Window handle
-/// @param preset Quality preset
-/// @return Error code
+/**
+ * @brief Set the quality preset for a specific window.
+ * @param window Window handle.
+ * @param preset New quality level.
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_preset(BlurWindowHandle window, BlurQualityPreset preset);
 
-/// Set effect pipeline from JSON
-/// @param window Window handle
-/// @param json_config JSON configuration string
-/// @return Error code
+/**
+ * @brief Set the effect pipeline configuration using a JSON string.
+ * @param window Window handle.
+ * @param json_config JSON configuration.
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const char* json_config);
 
-/// Set window bounds
-/// @param window Window handle
-/// @param bounds New bounds
+/**
+ * @brief Update the window bounds.
+ * @param window Window handle.
+ * @param bounds New rectangle (left, top, right, bottom).
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds);
 
 // --- Effect Management ---
 
-/// Set the active effect type (0: Gaussian, 1: Box, 2: Kawase, 3: Radial)
+/**
+ * @brief Set the active effect type.
+ * @param window Window handle.
+ * @param type 0: Gaussian, 1: Box, 2: Kawase, 3: Radial.
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_effect_type(BlurWindowHandle window, int32_t type);
 
-/// Set overall effect strength (0.0 to 1.0)
-/// Determines the blend amount between original and blurred image.
+/**
+ * @brief Set the overall blend strength.
+ * @param window Window handle.
+ * @param strength 0.0 (transparent) to 1.0 (full blur).
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_strength(BlurWindowHandle window, float strength);
 
-/// Set blur-specific parameter (Sigma for Gaussian, Radius for Box, Iterations for Kawase)
+/**
+ * @brief Set the primary parameter for the active effect.
+ * @param window Window handle.
+ * @param param Effect specific (Sigma for Gaussian, Radius for Box, etc).
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_blur_param(BlurWindowHandle window, float param);
 
-/// Set tint color (RGBA, each 0.0 to 1.0)
-/// This replaces the previous tint color.
+/**
+ * @brief Set the tint color.
+ * @param r Red (0-1).
+ * @param g Green (0-1).
+ * @param b Blue (0-1).
+ * @param a Alpha (0-1).
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_tint_color(BlurWindowHandle window, float r, float g, float b, float a);
 
 // --- Noise Control ---
 
-/// Set noise intensity (0.0 to 1.0)
+/**
+ * @brief Set the intensity of the noise overlay.
+ * @param window Window handle.
+ * @param intensity 0.0 to 1.0.
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_noise_intensity(BlurWindowHandle window, float intensity);
 
-/// Set noise scale (1.0 to 1000.0)
+/**
+ * @brief Set the spatial scale of the noise pattern.
+ * @param window Window handle.
+ * @param scale 1.0 to 1000.0.
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_noise_scale(BlurWindowHandle window, float scale);
 
-/// Set noise animation speed
+/**
+ * @brief Set the animation speed of the noise.
+ * @param window Window handle.
+ * @param speed Speed factor (0 for static).
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_noise_speed(BlurWindowHandle window, float speed);
 
-/// Set noise type (0: White, 1: Sinusoid, 2: Grid, 3: Perlin, 4: Simplex, 5: Voronoi)
+/**
+ * @brief Set the noise pattern type.
+ * @param window Window handle.
+ * @param type 0: White, 1: Sin, 2: Grid, 3: Perlin, 4: Simplex, 5: Voronoi.
+ * @return BLUR_OK on success.
+ */
 BLURWINDOW_API BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_t type);
 
 // --- Utility ---
 
-/// Get current FPS
-/// @param window Window handle
-/// @return Current FPS, or -1 on error
+/**
+ * @brief Get current FPS for the window.
+ * @return Current frames per second.
+ */
 BLURWINDOW_API float blur_get_fps(BlurWindowHandle window);
 
-/// Get last error message
-/// @return Error message string (static, do not free)
+/**
+ * @brief Get the last error string.
+ * @return Static error string pointer.
+ */
 BLURWINDOW_API const char* blur_get_last_error(void);
 
-/// Enable/disable logging
-/// @param sys System handle
-/// @param enable 0 = disable, 1 = enable
-/// @param path Log file path (NULL for console)
+/**
+ * @brief Enable or disable detailed logging.
+ * @param sys System handle.
+ * @param enable 1 to enable, 0 to disable.
+ * @param path Optional file path (NULL for console).
+ */
 BLURWINDOW_API void blur_enable_logging(BlurSystemHandle sys, int32_t enable, const char* path);
 
 #ifdef __cplusplus
