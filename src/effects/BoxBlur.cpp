@@ -10,12 +10,14 @@ namespace blurwindow {
 // Horizontal Box blur shader
 static const char* g_BoxBlurH = R"(
 Texture2D inputTexture : register(t0);
+Texture2D originalTexture : register(t1);
 SamplerState linearSampler : register(s0);
 
 cbuffer BoxParams : register(b0) {
     float2 texelSize;
     int radius;
-    float padding;
+    float strength;
+    float4 tintColor;
 };
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
@@ -225,6 +227,8 @@ public:
         UpdateConstantBuffer(context, width, height);
         context->PSSetShader(m_horizontalPS.Get(), nullptr, 0);
         context->PSSetShaderResources(0, 1, &input);
+        // Bind input also to t1 for original texture reference
+        context->PSSetShaderResources(1, 1, &input);
         context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
         context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
         context->OMSetRenderTargets(1, m_intermediateRTV.GetAddressOf(), nullptr);
@@ -308,6 +312,17 @@ public:
     }
     std::string GetParameters() const override { 
         char buffer[32]; snprintf(buffer, sizeof(buffer), "{\"radius\": %d}", m_radius); return buffer; 
+    }
+
+    void SetStrength(float strength) override {
+        m_strength = std::clamp(strength, 0.0f, 1.0f);
+    }
+
+    void SetColor(float r, float g, float b, float a) override {
+        m_tintColor[0] = r;
+        m_tintColor[1] = g;
+        m_tintColor[2] = b;
+        m_tintColor[3] = a;
     }
 
 private:

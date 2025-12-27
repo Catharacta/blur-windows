@@ -191,6 +191,10 @@ public:
 
             context->PSSetShader(m_kawasePS.Get(), nullptr, 0);
             context->PSSetShaderResources(0, 1, &currentInput);
+            // Bind original image to t1 for final pass strength blending
+            if (isLast) {
+                context->PSSetShaderResources(1, 1, &input);
+            }
             context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
             context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
             context->OMSetRenderTargets(1, &currentOutput, nullptr);
