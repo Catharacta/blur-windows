@@ -3,6 +3,11 @@
 Windows 11向け高機能カスタムブラーウィンドウC++ライブラリ。
 OS標準の Acrylic や Mica よりも自由度の高いブラー、ティント、ノイズ合成を提供します。
 
+## ドキュメント
+
+- [**導入ガイド (Usage Guide)**](docs/USAGE_GUIDE.md): ライブラリのセットアップ、必要ファイル、配置場所について。
+- [**C API リファレンス**](docs/C_API_REFERENCE.md): 他言語（Rust, C#等）から利用するための API 手引書。
+
 ## 主な特徴
 
 - **多彩なブラーエフェクト**: Gaussian, Box, Kawase, Radial Blur をサポート。
