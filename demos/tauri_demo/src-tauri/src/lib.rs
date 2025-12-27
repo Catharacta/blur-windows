@@ -26,6 +26,7 @@ struct BlurWindowOptionsC {
 
 extern "C" {
     fn blur_init(opts: *const BlurSystemOptionsC) -> *mut std::ffi::c_void;
+    #[allow(dead_code)]
     fn blur_shutdown(sys: *mut std::ffi::c_void);
     fn blur_create_window(
         sys: *mut std::ffi::c_void,

@@ -8,11 +8,9 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", libs_dir.display());
     println!("cargo:rustc-link-lib=dylib=blurwindow");
 
-    // Copy DLL to target directory for dev convenience
-    let target_dir = env::var("OUT_DIR").unwrap(); // This is for build artifacts
-                                                   // But we actually need it next to the executable for dev.
-                                                   // However, Tauri v2 usually handles bundle resources.
-                                                   // For `cargo run`, we often need it in the same dir as the exe.
+    // But we actually need it next to the executable for dev.
+    // However, Tauri v2 usually handles bundle resources.
+    // For `cargo run`, we often need it in the same dir as the exe.
 
     // Simplest way for tauri dev is to tell cargo to re-run if libs change
     println!("cargo:rerun-if-changed=libs/blurwindow.dll");
