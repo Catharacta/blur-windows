@@ -303,7 +303,7 @@ public:
     bool SetParameters(const char* json) override { 
         if (json && strstr(json, "\"param\"")) {
             float val = 0;
-            if (sscanf(json, "{\"param\": %f}", &val) == 1) {
+            if (sscanf_s(json, "{\"param\": %f}", &val) == 1) {
                 m_radius = (int)std::clamp(val, 1.0f, 32.0f);
                 return true;
             }
@@ -312,17 +312,6 @@ public:
     }
     std::string GetParameters() const override { 
         char buffer[32]; snprintf(buffer, sizeof(buffer), "{\"radius\": %d}", m_radius); return buffer; 
-    }
-
-    void SetStrength(float strength) override {
-        m_strength = std::clamp(strength, 0.0f, 1.0f);
-    }
-
-    void SetColor(float r, float g, float b, float a) override {
-        m_tintColor[0] = r;
-        m_tintColor[1] = g;
-        m_tintColor[2] = b;
-        m_tintColor[3] = a;
     }
 
 private:

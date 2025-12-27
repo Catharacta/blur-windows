@@ -191,10 +191,7 @@ public:
 
             context->PSSetShader(m_kawasePS.Get(), nullptr, 0);
             context->PSSetShaderResources(0, 1, &currentInput);
-            // Bind original image to t1 for final pass strength blending
-            if (isLast) {
-                context->PSSetShaderResources(1, 1, &input);
-            }
+            
             context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
             context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
             context->OMSetRenderTargets(1, &currentOutput, nullptr);
@@ -216,10 +213,10 @@ public:
         context->PSSetConstantBuffers(0, 1, m_noiseConstantBuffer.GetAddressOf());
         m_fullscreenRenderer.DrawFullscreen(context);
          
-        ID3D11RenderTargetView* nullRTV = nullptr;
-        ID3D11ShaderResourceView* nullSRV = nullptr;
-        context->OMSetRenderTargets(1, &nullRTV, nullptr);
-        context->PSSetShaderResources(0, 1, &nullSRV);
+        ID3D11RenderTargetView* nullRTV_noise = nullptr;
+        ID3D11ShaderResourceView* nullSRV_noise = nullptr;
+        context->OMSetRenderTargets(1, &nullRTV_noise, nullptr);
+        context->PSSetShaderResources(0, 1, &nullSRV_noise);
         currentInput = m_noisedSRV.Get();
 
         // Pass 3: Final Composite
@@ -234,6 +231,8 @@ public:
         // Cleanup
         ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
         context->PSSetShaderResources(0, 2, nullSRVs);
+        ID3D11RenderTargetView* nullRTV_final = nullptr;
+        context->OMSetRenderTargets(1, &nullRTV_final, nullptr);
         return true;
     }
 

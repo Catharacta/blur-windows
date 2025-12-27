@@ -16,6 +16,11 @@
     #define BLURWINDOW_API
 #endif
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4251)
+#endif
+
 // Forward declarations
 #include <windows.h>
 #include <memory>
@@ -96,3 +101,7 @@ private:
 };
 
 } // namespace blurwindow
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif

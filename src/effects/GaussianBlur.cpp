@@ -343,26 +343,6 @@ public:
         context->PSSetShaderResources(0, 2, nullSRVs);
         context->OMSetRenderTargets(1, &nullRTV, nullptr);
 
-        // ===== Pass 3: Composite (original + blurred -> output) =====
-        // Update composite constant buffer with strength
-        UpdateCompositeConstantBuffer(context);
-        
-        context->PSSetShader(m_compositePS.Get(), nullptr, 0);
-        // t0 = COPIED original, t1 = blurred
-        ID3D11ShaderResourceView* originalSRV = m_originalSRV.Get();
-        context->PSSetShaderResources(0, 1, &originalSRV);
-        ID3D11ShaderResourceView* blurredSRV = m_blurredSRV.Get();
-        context->PSSetShaderResources(1, 1, &blurredSRV);
-        context->PSSetConstantBuffers(0, 1, m_compositeConstantBuffer.GetAddressOf());
-        context->OMSetRenderTargets(1, &output, nullptr);
-        
-        m_fullscreenRenderer.DrawFullscreen(context);
-
-        // Cleanup
-        ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
-        context->PSSetShaderResources(0, 2, nullSRVs);
-        context->OMSetRenderTargets(1, &nullRTV, nullptr);
-
         return true;
     }
 
@@ -529,47 +509,6 @@ private:
         ComPtr<ID3D11Resource> inputResource;
         input->GetResource(inputResource.GetAddressOf());
         context->CopyResource(m_originalTexture.Get(), inputResource.Get());
-    }
-    
-    void EnsureBlurredTexture(uint32_t width, uint32_t height) {
-        if (m_blurredWidth == width && m_blurredHeight == height) {
-            return;
-        }
-
-        m_blurredTexture.Reset();
-        m_blurredSRV.Reset();
-        m_blurredRTV.Reset();
-
-        D3D11_TEXTURE2D_DESC desc = {};
-        desc.Width = width;
-        desc.Height = height;
-        desc.MipLevels = 1;
-        desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-        desc.SampleDesc.Count = 1;
-        desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-
-        m_device->CreateTexture2D(&desc, nullptr, m_blurredTexture.GetAddressOf());
-        m_device->CreateShaderResourceView(m_blurredTexture.Get(), nullptr, m_blurredSRV.GetAddressOf());
-        m_device->CreateRenderTargetView(m_blurredTexture.Get(), nullptr, m_blurredRTV.GetAddressOf());
-
-        m_blurredWidth = width;
-        m_blurredHeight = height;
-    }
-    
-    void UpdateCompositeConstantBuffer(ID3D11DeviceContext* context) {
-        D3D11_MAPPED_SUBRESOURCE mapped;
-        HRESULT hr = context->Map(m_compositeConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-        if (SUCCEEDED(hr)) {
-            // CompositeParams: float strength + float3 padding
-            float* params = static_cast<float*>(mapped.pData);
-            params[0] = m_strength;
-            params[1] = 0.0f;  // padding
-            params[2] = 0.0f;
-            params[3] = 0.0f;
-            context->Unmap(m_compositeConstantBuffer.Get(), 0);
-        }
     }
 
     ID3D11Device* m_device = nullptr;

@@ -535,7 +535,6 @@ private:
         static int frameCounter = 0;
         if (++frameCounter % 120 == 0) {
             auto captureMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
-            auto srvMs = std::chrono::duration<double, std::milli>(t2 - t1).count();
             auto blurMs = std::chrono::duration<double, std::milli>(t3 - t2).count();
             auto presentMs = std::chrono::duration<double, std::milli>(t4 - t3).count();
             auto totalMs = std::chrono::duration<double, std::milli>(t4 - t0).count();
