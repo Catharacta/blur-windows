@@ -7,8 +7,8 @@
 
 namespace blurwindow {
 
-// Box blur shader
-static const char* g_BoxBlurPS = R"(
+// Horizontal Box blur shader
+static const char* g_BoxBlurH = R"(
 Texture2D inputTexture : register(t0);
 SamplerState linearSampler : register(s0);
 
@@ -21,12 +21,33 @@ cbuffer BoxParams : register(b0) {
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
     float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float count = 0.0f;
-    for (int x = -radius; x <= radius; x++) {
-        for (int y = -radius; y <= radius; y++) {
-            float2 offset = float2((float)x, (float)y) * texelSize;
-            color += inputTexture.Sample(linearSampler, texcoord + offset);
-            count += 1.0f;
-        }
+    for (int i = -radius; i <= radius; i++) {
+        float2 offset = float2((float)i * texelSize.x, 0.0f);
+        color += inputTexture.Sample(linearSampler, texcoord + offset);
+        count += 1.0f;
+    }
+    return color / count;
+}
+)";
+
+// Vertical Box blur shader
+static const char* g_BoxBlurV = R"(
+Texture2D inputTexture : register(t0);
+SamplerState linearSampler : register(s0);
+
+cbuffer BoxParams : register(b0) {
+    float2 texelSize;
+    int radius;
+    float padding;
+};
+
+float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
+    float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    float count = 0.0f;
+    for (int i = -radius; i <= radius; i++) {
+        float2 offset = float2(0.0f, (float)i * texelSize.y);
+        color += inputTexture.Sample(linearSampler, texcoord + offset);
+        count += 1.0f;
     }
     return color / count;
 }
@@ -136,7 +157,7 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     float4 original = originalTexture.Sample(linearSampler, texcoord);
     float4 blurred = blurredTexture.Sample(linearSampler, texcoord);
     float4 result = lerp(original, blurred, strength);
-    result.rgb = lerp(result.rgb, tintColor.rgb, tintColor.a);
+    result.rgb = lerp(result.rgb, tintColor.rgb, tintColor.a * tintColor.a); 
     result.a = 1.0f; 
     return result;
 }
@@ -151,8 +172,12 @@ public:
 
     bool Initialize(ID3D11Device* device) override {
         m_device = device;
-        if (!ShaderLoader::CompilePixelShader(device, g_BoxBlurPS, strlen(g_BoxBlurPS), "main", m_boxPS.GetAddressOf())) {
-            LOG_ERROR("Failed to compile BoxBlur shader");
+        if (!ShaderLoader::CompilePixelShader(device, g_BoxBlurH, strlen(g_BoxBlurH), "main", m_horizontalPS.GetAddressOf())) {
+            LOG_ERROR("Failed to compile BoxBlurH shader");
+            return false;
+        }
+        if (!ShaderLoader::CompilePixelShader(device, g_BoxBlurV, strlen(g_BoxBlurV), "main", m_verticalPS.GetAddressOf())) {
+            LOG_ERROR("Failed to compile BoxBlurV shader");
             return false;
         }
         if (!ShaderLoader::CompilePixelShader(device, g_NoisePS, strlen(g_NoisePS), "main", m_noisePS.GetAddressOf())) {
@@ -188,7 +213,7 @@ public:
     }
 
     bool Apply(ID3D11DeviceContext* context, ID3D11ShaderResourceView* input, ID3D11RenderTargetView* output, uint32_t width, uint32_t height) override {
-        if (!m_boxPS) return false;
+        if (!m_horizontalPS || !m_verticalPS) return false;
         EnsureTextures(width, height);
         CopyInputToOriginal(context, input);
         m_fullscreenRenderer->SetViewport(context, width, height);
@@ -196,9 +221,9 @@ public:
         ID3D11ShaderResourceView* nullSRV = nullptr;
         ID3D11RenderTargetView* nullRTV = nullptr;
 
-        // Pass 1: Initial Blur
+        // Pass 1: Horizontal Blur (Input -> Intermediate)
         UpdateConstantBuffer(context, width, height);
-        context->PSSetShader(m_boxPS.Get(), nullptr, 0);
+        context->PSSetShader(m_horizontalPS.Get(), nullptr, 0);
         context->PSSetShaderResources(0, 1, &input);
         context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
         context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
@@ -207,34 +232,50 @@ public:
         context->OMSetRenderTargets(1, &nullRTV, nullptr);
         context->PSSetShaderResources(0, 1, &nullSRV);
 
-        // Pass 2: Noise
-        UpdateNoiseConstantBuffer(context);
-        context->PSSetShader(m_noisePS.Get(), nullptr, 0);
+        // Pass 2: Vertical Blur (Intermediate -> Blurred)
+        context->PSSetShader(m_verticalPS.Get(), nullptr, 0);
         ID3D11ShaderResourceView* intermediateSRV = m_intermediateSRV.Get();
         context->PSSetShaderResources(0, 1, &intermediateSRV);
+        context->OMSetRenderTargets(1, m_blurredRTV.GetAddressOf(), nullptr);
+        m_fullscreenRenderer->DrawFullscreen(context);
+        context->OMSetRenderTargets(1, &nullRTV, nullptr);
+        context->PSSetShaderResources(0, 1, &nullSRV);
+
+        // Pass 3: Noise (Blurred -> Noised)
+        UpdateNoiseConstantBuffer(context);
+        context->PSSetShader(m_noisePS.Get(), nullptr, 0);
+        ID3D11ShaderResourceView* blurredSRV = m_blurredSRV.Get();
+        context->PSSetShaderResources(0, 1, &blurredSRV);
         context->PSSetConstantBuffers(0, 1, m_noiseConstantBuffer.GetAddressOf());
         context->OMSetRenderTargets(1, m_noisedRTV.GetAddressOf(), nullptr);
         m_fullscreenRenderer->DrawFullscreen(context);
         context->OMSetRenderTargets(1, &nullRTV, nullptr);
         context->PSSetShaderResources(0, 1, &nullSRV);
 
-        // Pass 3: Soften Noise
-        context->PSSetShader(m_boxPS.Get(), nullptr, 0);
+        // Pass 4 & 5: Second Blur to Soften Noise (Noised -> Intermediate -> Blurred)
+        context->PSSetShader(m_horizontalPS.Get(), nullptr, 0);
         ID3D11ShaderResourceView* noisedSRV = m_noisedSRV.Get();
         context->PSSetShaderResources(0, 1, &noisedSRV);
-        context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
+        context->OMSetRenderTargets(1, m_intermediateRTV.GetAddressOf(), nullptr);
+        m_fullscreenRenderer->DrawFullscreen(context);
+        context->OMSetRenderTargets(1, &nullRTV, nullptr);
+        context->PSSetShaderResources(0, 1, &nullSRV);
+
+        context->PSSetShader(m_verticalPS.Get(), nullptr, 0);
+        ID3D11ShaderResourceView* intSRV2 = m_intermediateSRV.Get();
+        context->PSSetShaderResources(0, 1, &intSRV2);
         context->OMSetRenderTargets(1, m_blurredRTV.GetAddressOf(), nullptr);
         m_fullscreenRenderer->DrawFullscreen(context);
         context->OMSetRenderTargets(1, &nullRTV, nullptr);
         context->PSSetShaderResources(0, 1, &nullSRV);
 
-        // Pass 4: Composite
+        // Pass 6: Final Composite
         UpdateCompositeConstantBuffer(context);
         context->PSSetShader(m_compositePS.Get(), nullptr, 0);
         ID3D11ShaderResourceView* originalSRV = m_originalSRV.Get();
-        ID3D11ShaderResourceView* blurredSRV = m_blurredSRV.Get();
+        ID3D11ShaderResourceView* finalBlurredSRV = m_blurredSRV.Get();
         context->PSSetShaderResources(0, 1, &originalSRV);
-        context->PSSetShaderResources(1, 1, &blurredSRV);
+        context->PSSetShaderResources(1, 1, &finalBlurredSRV);
         context->PSSetConstantBuffers(0, 1, m_compositeConstantBuffer.GetAddressOf());
         context->OMSetRenderTargets(1, &output, nullptr);
         m_fullscreenRenderer->DrawFullscreen(context);
@@ -245,7 +286,6 @@ public:
         return true;
     }
 
-    void SetRadius(int radius) { m_radius = std::clamp(radius, 1, 10); }
     void SetStrength(float strength) override { m_strength = std::clamp(strength, 0.0f, 1.0f); }
     void SetColor(float r, float g, float b, float a) override { m_tintColor[0] = r; m_tintColor[1] = g; m_tintColor[2] = b; m_tintColor[3] = a; }
     void SetNoiseIntensity(float intensity) override { m_noiseIntensity = std::clamp(intensity, 0.0f, 1.0f); }
@@ -256,7 +296,16 @@ public:
         m_currentTime += deltaTime * m_noiseSpeed;
         if (m_currentTime > 10000.0f) m_currentTime = fmod(m_currentTime, 10000.0f);
     }
-    bool SetParameters(const char* json) override { return true; }
+    bool SetParameters(const char* json) override { 
+        if (json && strstr(json, "\"param\"")) {
+            float val = 0;
+            if (sscanf(json, "{\"param\": %f}", &val) == 1) {
+                m_radius = (int)std::clamp(val, 1.0f, 32.0f);
+                return true;
+            }
+        }
+        return true; 
+    }
     std::string GetParameters() const override { 
         char buffer[32]; snprintf(buffer, sizeof(buffer), "{\"radius\": %d}", m_radius); return buffer; 
     }
@@ -320,7 +369,7 @@ private:
     }
 
     ID3D11Device* m_device = nullptr;
-    ComPtr<ID3D11PixelShader> m_boxPS, m_noisePS, m_compositePS;
+    ComPtr<ID3D11PixelShader> m_horizontalPS, m_verticalPS, m_noisePS, m_compositePS;
     ComPtr<ID3D11Buffer> m_constantBuffer, m_noiseConstantBuffer, m_compositeConstantBuffer;
     ComPtr<ID3D11SamplerState> m_sampler;
     std::unique_ptr<FullscreenRenderer> m_fullscreenRenderer;

@@ -149,6 +149,7 @@ public:
             newEffect->SetNoiseScale(m_noiseScale);
             newEffect->SetNoiseSpeed(m_noiseSpeed);
             newEffect->SetNoiseType(m_noiseType);
+            newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
             m_effect = std::move(newEffect);
             m_graphicsInitialized = (m_capture && m_effect && m_presenter);
             return true;
@@ -167,8 +168,36 @@ public:
 
     void SetBlurColor(float r, float g, float b, float a) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        m_tintColor[0] = r; m_tintColor[1] = g; m_tintColor[2] = b; m_tintColor[3] = a;
         if (m_effect) {
             m_effect->SetColor(r, g, b, a);
+        }
+    }
+
+    void SetEffectType(int type) {
+        EffectType effectType = static_cast<EffectType>(type);
+        auto newEffect = SubsystemFactory::CreateEffect(effectType);
+        if (newEffect && newEffect->Initialize(m_device)) {
+            std::lock_guard<std::mutex> lock(m_graphicsMutex);
+            newEffect->SetStrength(m_currentStrength);
+            newEffect->SetNoiseIntensity(m_noiseIntensity);
+            newEffect->SetNoiseScale(m_noiseScale);
+            newEffect->SetNoiseSpeed(m_noiseSpeed);
+            newEffect->SetNoiseType(m_noiseType);
+            newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
+            m_effect = std::move(newEffect);
+        }
+    }
+
+    void SetBlurParam(float param) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        if (m_effect) {
+            // This is a bit of a hack since IBlurEffect doesn't have a generic SetParam
+            // We'll need to check the effect type or add SetParam to IBlurEffect
+            // For now, let's assume SetParameters can handle a simple float-check
+            char buffer[64];
+            snprintf(buffer, sizeof(buffer), "{\"param\": %.2f}", param);
+            m_effect->SetParameters(buffer);
         }
     }
 
@@ -555,6 +584,7 @@ private:
     float m_noiseScale = 100.0f;
     float m_noiseSpeed = 1.0f;
     int m_noiseType = 0;
+    float m_tintColor[4] = { 0, 0, 0, 0 };
 
     // Graphics resources
     ID3D11Device* m_device = nullptr;
@@ -649,6 +679,14 @@ void BlurWindow::SetNoiseSpeed(float speed) {
 
 void BlurWindow::SetNoiseType(int type) {
     m_impl->SetNoiseType(type);
+}
+
+void BlurWindow::SetEffectType(int type) {
+    m_impl->SetEffectType(type);
+}
+
+void BlurWindow::SetBlurParam(float param) {
+    m_impl->SetBlurParam(param);
 }
 
 void BlurWindow::SetClickThrough(bool enable) {

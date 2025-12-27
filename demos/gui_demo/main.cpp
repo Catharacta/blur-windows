@@ -41,8 +41,12 @@ HWND g_hStatusText = NULL;
 #define ID_RADIO_NOISE_SIMPLEX  1040
 #define ID_COMBO_EFFECT 1041
 #define ID_RADIO_NOISE_VORONOI  1042
+#define ID_SLIDER_TINT_ALPHA  1043
+#define ID_SLIDER_BLUR_PARAM  1044
 
 HWND g_hComboEffect = NULL;
+COLORREF g_tintColor = RGB(255, 255, 255);
+float g_tintAlpha = 0.0f;
  
 #define WM_APP_LOG      (WM_APP + 1)
 
@@ -109,6 +113,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SendMessage(hSlider, TBM_SETPOS, TRUE, 100);
 
         y += 40;
+        CreateWindow(L"STATIC", L"Blur Param (1-50):", WS_VISIBLE | WS_CHILD, x, y, 120, 20, hwnd, NULL, NULL, NULL);
+        HWND hBlurParam = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 30, hwnd, (HMENU)ID_SLIDER_BLUR_PARAM, NULL, NULL);
+        SendMessage(hBlurParam, TBM_SETRANGE, TRUE, MAKELONG(1, 50));
+        SendMessage(hBlurParam, TBM_SETPOS, TRUE, 5);
+
+        y += 40;
         CreateWindow(L"STATIC", L"Noise Intensity:", WS_VISIBLE | WS_CHILD, x, y, 120, 20, hwnd, NULL, NULL, NULL);
         HWND hNoiseInt = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
             x + 130, y, 300, 30, hwnd, (HMENU)ID_SLIDER_NOISE_INT, NULL, NULL);
@@ -139,6 +150,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateWindow(L"BUTTON", L"Simplex", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 310, y, 70, 20, hwnd, (HMENU)ID_RADIO_NOISE_SIMPLEX, NULL, NULL);
         CreateWindow(L"BUTTON", L"Voronoi", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 380, y, 70, 20, hwnd, (HMENU)ID_RADIO_NOISE_VORONOI, NULL, NULL);
         CheckRadioButton(hwnd, ID_RADIO_NOISE_WHITE, ID_RADIO_NOISE_VORONOI, ID_RADIO_NOISE_WHITE);
+
+        y += 30;
+        CreateWindow(L"BUTTON", L"Pick Tint Color", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x, y, 120, 30, hwnd, (HMENU)ID_BTN_COLOR, NULL, NULL);
+        
+        y += 40;
+        CreateWindow(L"STATIC", L"Tint Alpha (0-100):", WS_VISIBLE | WS_CHILD, x, y, 120, 20, hwnd, NULL, NULL, NULL);
+        HWND hTintAlpha = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 30, hwnd, (HMENU)ID_SLIDER_TINT_ALPHA, NULL, NULL);
+        SendMessage(hTintAlpha, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+        SendMessage(hTintAlpha, TBM_SETPOS, TRUE, 0);
 
         y += 30;
         CreateWindow(L"STATIC", L"Status:", WS_VISIBLE | WS_CHILD, x, y, 60, 20, hwnd, NULL, NULL, NULL);
@@ -218,6 +239,27 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 AppendLog(L"Noise type changed.");
             }
             break;
+        case ID_BTN_COLOR:
+            if (g_blurWindow) {
+                CHOOSECOLOR cc;
+                static COLORREF acrCustClr[16];
+                ZeroMemory(&cc, sizeof(cc));
+                cc.lStructSize = sizeof(cc);
+                cc.hwndOwner = hwnd;
+                cc.lpCustColors = (LPDWORD)acrCustClr;
+                cc.rgbResult = g_tintColor;
+                cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+
+                if (ChooseColor(&cc)) {
+                    g_tintColor = cc.rgbResult;
+                    float r = GetRValue(g_tintColor) / 255.0f;
+                    float g = GetGValue(g_tintColor) / 255.0f;
+                    float b = GetBValue(g_tintColor) / 255.0f;
+                    g_blurWindow->SetBlurColor(r, g, b, g_tintAlpha);
+                    AppendLog(L"Tint color changed.");
+                }
+            }
+            break;
         }
         // Handle ComboBox selection change
         if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == ID_COMBO_EFFECT) {
@@ -257,6 +299,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_NOISE_SPEED)) {
             int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
             g_blurWindow->SetNoiseSpeed(pos / 10.0f);
+        } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_TINT_ALPHA)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_tintAlpha = pos / 100.0f;
+            float r = GetRValue(g_tintColor) / 255.0f;
+            float g = GetGValue(g_tintColor) / 255.0f;
+            float b = GetBValue(g_tintColor) / 255.0f;
+            g_blurWindow->SetBlurColor(r, g, b, g_tintAlpha);
+        } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_BLUR_PARAM)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_blurWindow->SetBlurParam((float)pos);
         }
         return 0;
     }

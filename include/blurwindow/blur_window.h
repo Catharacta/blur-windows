@@ -56,8 +56,14 @@ public:
     /// Set noise animation speed
     void SetNoiseSpeed(float speed);
 
-    /// Set noise type (0: White, 1: Sinusoid, 2: Grid, 3: Perlin, 4: Simplex)
+    /// Set noise type (0: White, 1: Sinusoid, 2: Grid, 3: Perlin, 4: Simplex, 5: Voronoi)
     void SetNoiseType(int type);
+
+    /// Set the active effect type (0: Gaussian, 1: Box, 2: Kawase, 3: Radial)
+    void SetEffectType(int type);
+
+    /// Set blur-specific parameter (Sigma for Gaussian, Radius for Box, Iterations for Kawase)
+    void SetBlurParam(float param);
 
     /// Enable/disable click-through
     /// @param enable true to enable click-through

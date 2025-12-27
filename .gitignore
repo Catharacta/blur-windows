@@ -3,6 +3,12 @@ build/
 out/
 cmake-build-*/
 
+# Tauri
+demos/tauri_demo/src-tauri/target/
+demos/tauri_demo/src-tauri/libs/*.dll
+demos/tauri_demo/src-tauri/libs/*.lib
+demos/tauri_demo/node_modules/
+
 # Visual Studio
 .vs/
 *.vcxproj.user

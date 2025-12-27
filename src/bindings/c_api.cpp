@@ -115,6 +115,34 @@ BlurErrorCode blur_set_noise_intensity(BlurWindowHandle window, float intensity)
     return BLUR_OK;
 }
 
+BlurErrorCode blur_set_effect_type(BlurWindowHandle window, int32_t type) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetEffectType(type);
+    return BLUR_OK;
+}
+
+BlurErrorCode blur_set_strength(BlurWindowHandle window, float strength) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetBlurStrength(strength);
+    return BLUR_OK;
+}
+
+BlurErrorCode blur_set_blur_param(BlurWindowHandle window, float param) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetBlurParam(param);
+    return BLUR_OK;
+}
+
+BlurErrorCode blur_set_tint_color(BlurWindowHandle window, float r, float g, float b, float a) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetBlurColor(r, g, b, a);
+    return BLUR_OK;
+}
+
 BlurErrorCode blur_set_noise_scale(BlurWindowHandle window, float scale) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);

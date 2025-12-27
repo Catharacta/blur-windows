@@ -112,8 +112,25 @@ BLURWINDOW_API BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const ch
 /// Set window bounds
 /// @param window Window handle
 /// @param bounds New bounds
-/// @return Error code
 BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds);
+
+// --- Effect Management ---
+
+/// Set the active effect type (0: Gaussian, 1: Box, 2: Kawase, 3: Radial)
+BLURWINDOW_API BlurErrorCode blur_set_effect_type(BlurWindowHandle window, int32_t type);
+
+/// Set overall effect strength (0.0 to 1.0)
+/// Determines the blend amount between original and blurred image.
+BLURWINDOW_API BlurErrorCode blur_set_strength(BlurWindowHandle window, float strength);
+
+/// Set blur-specific parameter (Sigma for Gaussian, Radius for Box, Iterations for Kawase)
+BLURWINDOW_API BlurErrorCode blur_set_blur_param(BlurWindowHandle window, float param);
+
+/// Set tint color (RGBA, each 0.0 to 1.0)
+/// This replaces the previous tint color.
+BLURWINDOW_API BlurErrorCode blur_set_tint_color(BlurWindowHandle window, float r, float g, float b, float a);
+
+// --- Noise Control ---
 
 /// Set noise intensity (0.0 to 1.0)
 BLURWINDOW_API BlurErrorCode blur_set_noise_intensity(BlurWindowHandle window, float intensity);
@@ -124,8 +141,10 @@ BLURWINDOW_API BlurErrorCode blur_set_noise_scale(BlurWindowHandle window, float
 /// Set noise animation speed
 BLURWINDOW_API BlurErrorCode blur_set_noise_speed(BlurWindowHandle window, float speed);
 
-/// Set noise type (0: White, 1: Sinusoid, 2: Grid, 3: Perlin, 4: Simplex)
+/// Set noise type (0: White, 1: Sinusoid, 2: Grid, 3: Perlin, 4: Simplex, 5: Voronoi)
 BLURWINDOW_API BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_t type);
+
+// --- Utility ---
 
 /// Get current FPS
 /// @param window Window handle
