@@ -17,7 +17,8 @@ enum class CaptureType {
 enum class EffectType {
     Gaussian,       // Separable Gaussian blur
     Kawase,         // Kawase/Dual blur
-    Box             // Simple box blur
+    Box,            // Simple box blur
+    Radial          // Radial / Zoom blur
 };
 
 /// Presenter types
@@ -32,6 +33,7 @@ std::unique_ptr<ICaptureSubsystem> CreateDXGICapture();
 std::unique_ptr<IBlurEffect> CreateGaussianBlur();
 std::unique_ptr<IBlurEffect> CreateKawaseBlur();
 std::unique_ptr<IBlurEffect> CreateBoxBlur();
+std::unique_ptr<IBlurEffect> CreateRadialBlur();
 std::unique_ptr<IPresenter> CreateDirectCompPresenter();
 std::unique_ptr<IPresenter> CreateULWPresenter();
 
@@ -57,6 +59,8 @@ public:
                 return CreateKawaseBlur();
             case EffectType::Box:
                 return CreateBoxBlur();
+            case EffectType::Radial:
+                return CreateRadialBlur();
             default:
                 return nullptr;
         }

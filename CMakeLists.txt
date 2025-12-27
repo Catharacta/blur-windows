@@ -60,6 +60,7 @@ set(EFFECTS_SOURCES
     src/effects/GaussianBlur.cpp
     src/effects/KawaseBlur.cpp
     src/effects/BoxBlur.cpp
+    src/effects/RadialBlur.cpp
 )
 
 # Source files - Presentation

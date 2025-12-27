@@ -70,8 +70,6 @@ public:
     static std::unique_ptr<IBlurEffect> CreateEffect(const std::string& type) {
         if (type == "gaussian" || type == "Gaussian") {
             return CreateGaussianBlur();
-        } else if (type == "kawase" || type == "Kawase") {
-            return CreateKawaseBlur();
         } else if (type == "box" || type == "Box") {
             return CreateBoxBlur();
         }

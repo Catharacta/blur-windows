@@ -47,6 +47,24 @@ public:
     /// @param a Alpha component (0.0 to 1.0)
     void SetBlurColor(float r, float g, float b, float a);
 
+    /// Set noise intensity (0.0 to 1.0)
+    void SetNoiseIntensity(float intensity);
+
+    /// Set noise scale (1.0 to 100.0)
+    void SetNoiseScale(float scale);
+
+    /// Set noise animation speed
+    void SetNoiseSpeed(float speed);
+
+    /// Set noise type (0: White, 1: Sinusoid, 2: Grid, 3: Perlin, 4: Simplex, 5: Voronoi)
+    void SetNoiseType(int type);
+
+    /// Set the active effect type (0: Gaussian, 1: Box, 2: Kawase, 3: Radial)
+    void SetEffectType(int type);
+
+    /// Set blur-specific parameter (Sigma for Gaussian, Radius for Box, Iterations for Kawase)
+    void SetBlurParam(float param);
+
     /// Enable/disable click-through
     /// @param enable true to enable click-through
     void SetClickThrough(bool enable);

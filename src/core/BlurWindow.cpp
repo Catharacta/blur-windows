@@ -145,6 +145,11 @@ public:
             std::lock_guard<std::mutex> lock(m_graphicsMutex);
             // Preserve current strength and apply to new effect
             newEffect->SetStrength(m_currentStrength);
+            newEffect->SetNoiseIntensity(m_noiseIntensity);
+            newEffect->SetNoiseScale(m_noiseScale);
+            newEffect->SetNoiseSpeed(m_noiseSpeed);
+            newEffect->SetNoiseType(m_noiseType);
+            newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
             m_effect = std::move(newEffect);
             m_graphicsInitialized = (m_capture && m_effect && m_presenter);
             return true;
@@ -163,9 +168,61 @@ public:
 
     void SetBlurColor(float r, float g, float b, float a) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        m_tintColor[0] = r; m_tintColor[1] = g; m_tintColor[2] = b; m_tintColor[3] = a;
         if (m_effect) {
             m_effect->SetColor(r, g, b, a);
         }
+    }
+
+    void SetEffectType(int type) {
+        EffectType effectType = static_cast<EffectType>(type);
+        auto newEffect = SubsystemFactory::CreateEffect(effectType);
+        if (newEffect && newEffect->Initialize(m_device)) {
+            std::lock_guard<std::mutex> lock(m_graphicsMutex);
+            newEffect->SetStrength(m_currentStrength);
+            newEffect->SetNoiseIntensity(m_noiseIntensity);
+            newEffect->SetNoiseScale(m_noiseScale);
+            newEffect->SetNoiseSpeed(m_noiseSpeed);
+            newEffect->SetNoiseType(m_noiseType);
+            newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
+            m_effect = std::move(newEffect);
+        }
+    }
+
+    void SetBlurParam(float param) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        if (m_effect) {
+            // This is a bit of a hack since IBlurEffect doesn't have a generic SetParam
+            // We'll need to check the effect type or add SetParam to IBlurEffect
+            // For now, let's assume SetParameters can handle a simple float-check
+            char buffer[64];
+            snprintf(buffer, sizeof(buffer), "{\"param\": %.2f}", param);
+            m_effect->SetParameters(buffer);
+        }
+    }
+
+    void SetNoiseIntensity(float intensity) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        m_noiseIntensity = intensity;
+        if (m_effect) m_effect->SetNoiseIntensity(intensity);
+    }
+
+    void SetNoiseScale(float scale) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        m_noiseScale = scale;
+        if (m_effect) m_effect->SetNoiseScale(scale);
+    }
+
+    void SetNoiseSpeed(float speed) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        m_noiseSpeed = speed;
+        if (m_effect) m_effect->SetNoiseSpeed(speed);
+    }
+
+    void SetNoiseType(int type) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        m_noiseType = type;
+        if (m_effect) m_effect->SetNoiseType(type);
     }
 
     bool IsInitialized() const {
@@ -442,6 +499,15 @@ private:
         auto t0 = clock::now();
         
         auto t1 = clock::now();
+        
+        // 1. Update effect animation
+        if (m_effect) {
+            static auto lastUpdate = clock::now();
+            auto now = clock::now();
+            float deltaTime = std::chrono::duration<float>(now - lastUpdate).count();
+            lastUpdate = now;
+            m_effect->Update(deltaTime);
+        }
 
         // 2. Manage SRV for captured texture
         if (capturedTexture != m_lastCapturedTexture) {
@@ -514,6 +580,11 @@ private:
     std::atomic<bool> m_running;
     std::atomic<float> m_currentFPS;
     float m_currentStrength = 1.0f;
+    float m_noiseIntensity = 0.0f;
+    float m_noiseScale = 100.0f;
+    float m_noiseSpeed = 1.0f;
+    int m_noiseType = 0;
+    float m_tintColor[4] = { 0, 0, 0, 0 };
 
     // Graphics resources
     ID3D11Device* m_device = nullptr;
@@ -592,6 +663,30 @@ void BlurWindow::SetBlurStrength(float strength) {
 
 void BlurWindow::SetBlurColor(float r, float g, float b, float a) {
     m_impl->SetBlurColor(r, g, b, a);
+}
+
+void BlurWindow::SetNoiseIntensity(float intensity) {
+    m_impl->SetNoiseIntensity(intensity);
+}
+
+void BlurWindow::SetNoiseScale(float scale) {
+    m_impl->SetNoiseScale(scale);
+}
+
+void BlurWindow::SetNoiseSpeed(float speed) {
+    m_impl->SetNoiseSpeed(speed);
+}
+
+void BlurWindow::SetNoiseType(int type) {
+    m_impl->SetNoiseType(type);
+}
+
+void BlurWindow::SetEffectType(int type) {
+    m_impl->SetEffectType(type);
+}
+
+void BlurWindow::SetBlurParam(float param) {
+    m_impl->SetBlurParam(param);
 }
 
 void BlurWindow::SetClickThrough(bool enable) {
