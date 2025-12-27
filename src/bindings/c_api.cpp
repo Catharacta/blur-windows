@@ -108,6 +108,34 @@ BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds) {
     return BLUR_OK;
 }
 
+BlurErrorCode blur_set_noise_intensity(BlurWindowHandle window, float intensity) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetNoiseIntensity(intensity);
+    return BLUR_OK;
+}
+
+BlurErrorCode blur_set_noise_scale(BlurWindowHandle window, float scale) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetNoiseScale(scale);
+    return BLUR_OK;
+}
+
+BlurErrorCode blur_set_noise_speed(BlurWindowHandle window, float speed) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetNoiseSpeed(speed);
+    return BLUR_OK;
+}
+
+BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_t type) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetNoiseType(type);
+    return BLUR_OK;
+}
+
 float blur_get_fps(BlurWindowHandle window) {
     if (!window) return -1.0f;
     

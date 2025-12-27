@@ -43,6 +43,21 @@ public:
     /// Set tint color
     virtual void SetColor(float r, float g, float b, float a) = 0;
 
+    /// Set noise intensity (0.0 to 1.0)
+    virtual void SetNoiseIntensity(float intensity) = 0;
+
+    /// Set noise scale (1.0 to 100.0)
+    virtual void SetNoiseScale(float scale) = 0;
+
+    /// Set noise animation speed (0.0 to 10.0)
+    virtual void SetNoiseSpeed(float speed) = 0;
+
+    /// Set noise type (0: White, 1: Sinusoid, 2: Grid, 3: Perlin, 4: Simplex)
+    virtual void SetNoiseType(int type) = 0;
+
+    /// Update animation state
+    virtual void Update(float deltaTime) = 0;
+
     /// Set effect parameters from JSON
     /// @param json JSON parameter string
     /// @return true on success

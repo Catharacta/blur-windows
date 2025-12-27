@@ -31,6 +31,14 @@ HWND g_hStatusText = NULL;
 #define ID_BTN_MINIMAL  1024
 #define ID_SLIDER_STRENGTH 1031
 #define ID_BTN_COLOR    1032
+#define ID_SLIDER_NOISE_INT   1033
+#define ID_SLIDER_NOISE_SCALE 1034
+#define ID_SLIDER_NOISE_SPEED 1035
+#define ID_RADIO_NOISE_WHITE    1036
+#define ID_RADIO_NOISE_SIN      1037
+#define ID_RADIO_NOISE_GRID     1038
+#define ID_RADIO_NOISE_PERLIN   1039
+#define ID_RADIO_NOISE_SIMPLEX  1040
 #define ID_COMBO_EFFECT 1041
 
 HWND g_hComboEffect = NULL;
@@ -87,6 +95,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
             x + 70, y, 150, 200, hwnd, (HMENU)ID_COMBO_EFFECT, NULL, NULL);
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Gaussian");
+        SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Kawase");
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Box");
         SendMessage(g_hComboEffect, CB_SETCURSEL, 0, 0);
 
@@ -97,7 +106,38 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SendMessage(hSlider, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
         SendMessage(hSlider, TBM_SETPOS, TRUE, 100);
 
-        y += 45;
+        y += 40;
+        CreateWindow(L"STATIC", L"Noise Intensity:", WS_VISIBLE | WS_CHILD, x, y, 120, 20, hwnd, NULL, NULL, NULL);
+        HWND hNoiseInt = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 30, hwnd, (HMENU)ID_SLIDER_NOISE_INT, NULL, NULL);
+        SendMessage(hNoiseInt, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+        SendMessage(hNoiseInt, TBM_SETPOS, TRUE, 0);
+
+        y += 40;
+        CreateWindow(L"STATIC", L"Noise Scale:", WS_VISIBLE | WS_CHILD, x, y, 120, 20, hwnd, NULL, NULL, NULL);
+        HWND hNoiseScale = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 30, hwnd, (HMENU)ID_SLIDER_NOISE_SCALE, NULL, NULL);
+        SendMessage(hNoiseScale, TBM_SETRANGE, TRUE, MAKELONG(1, 1000));
+        SendMessage(hNoiseScale, TBM_SETPOS, TRUE, 100);
+
+        y += 40;
+        CreateWindow(L"STATIC", L"Noise Speed:", WS_VISIBLE | WS_CHILD, x, y, 120, 20, hwnd, NULL, NULL, NULL);
+        HWND hNoiseSpeed = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 30, hwnd, (HMENU)ID_SLIDER_NOISE_SPEED, NULL, NULL);
+        SendMessage(hNoiseSpeed, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+        SendMessage(hNoiseSpeed, TBM_SETPOS, TRUE, 10);
+
+        y += 40;
+        CreateWindow(L"STATIC", L"Noise Type:", WS_VISIBLE | WS_CHILD, x, y, 100, 20, hwnd, NULL, NULL, NULL);
+        y += 25;
+        CreateWindow(L"BUTTON", L"White", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, x, y, 70, 20, hwnd, (HMENU)ID_RADIO_NOISE_WHITE, NULL, NULL);
+        CreateWindow(L"BUTTON", L"Sin", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 80, y, 60, 20, hwnd, (HMENU)ID_RADIO_NOISE_SIN, NULL, NULL);
+        CreateWindow(L"BUTTON", L"Grid", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 150, y, 60, 20, hwnd, (HMENU)ID_RADIO_NOISE_GRID, NULL, NULL);
+        CreateWindow(L"BUTTON", L"Perlin", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 220, y, 70, 20, hwnd, (HMENU)ID_RADIO_NOISE_PERLIN, NULL, NULL);
+        CreateWindow(L"BUTTON", L"Simplex", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 300, y, 80, 20, hwnd, (HMENU)ID_RADIO_NOISE_SIMPLEX, NULL, NULL);
+        CheckRadioButton(hwnd, ID_RADIO_NOISE_WHITE, ID_RADIO_NOISE_SIMPLEX, ID_RADIO_NOISE_WHITE);
+
+        y += 30;
         CreateWindow(L"STATIC", L"Status:", WS_VISIBLE | WS_CHILD, x, y, 60, 20, hwnd, NULL, NULL, NULL);
         g_hStatusText = CreateWindow(L"STATIC", L"Ready", WS_VISIBLE | WS_CHILD, x + 70, y, 300, 20, hwnd, NULL, NULL, NULL);
 
@@ -164,6 +204,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 UpdateStatus(L"Stopped");
             }
             break;
+        case ID_RADIO_NOISE_WHITE:
+        case ID_RADIO_NOISE_SIN:
+        case ID_RADIO_NOISE_PERLIN:
+        case ID_RADIO_NOISE_SIMPLEX:
+            if (g_blurWindow) {
+                int type = wmId - ID_RADIO_NOISE_WHITE;
+                g_blurWindow->SetNoiseType(type);
+                AppendLog(L"Noise type changed.");
+            }
+            break;
         }
         // Handle ComboBox selection change
         if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == ID_COMBO_EFFECT) {
@@ -171,10 +221,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 int sel = (int)SendMessage(g_hComboEffect, CB_GETCURSEL, 0, 0);
                 const char* configs[] = {
                     "{\"pipeline\": [{\"type\": \"gaussian\"}]}",
+                    "{\"pipeline\": [{\"type\": \"kawase\"}]}",
                     "{\"pipeline\": [{\"type\": \"box\"}]}"
                 };
-                const wchar_t* names[] = { L"Gaussian", L"Box" };
-                if (sel >= 0 && sel < 2) {
+                const wchar_t* names[] = { L"Gaussian", L"Kawase", L"Box" };
+                if (sel >= 0 && sel < 3) {
                     if (g_blurWindow->SetEffectPipeline(configs[sel])) {
                         AppendLog(std::wstring(L"Effect changed to ") + names[sel]);
                     } else {
@@ -192,6 +243,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             wchar_t buf[64];
             swprintf_s(buf, L"Strength: %d%% (0=transparent, 100=full blur)", pos);
             AppendLog(buf);
+        } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_NOISE_INT)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_blurWindow->SetNoiseIntensity(pos / 100.0f);
+        } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_NOISE_SCALE)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_blurWindow->SetNoiseScale((float)pos);
+        } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_NOISE_SPEED)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_blurWindow->SetNoiseSpeed(pos / 10.0f);
         }
         return 0;
     }
@@ -228,7 +288,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     HWND hwnd = CreateWindowEx(
         0, CLASS_NAME, L"BlurWindow Library GUI Demo",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 600, 550,
+        CW_USEDEFAULT, CW_USEDEFAULT, 600, 680,
         NULL, NULL, hInstance, NULL
     );
 

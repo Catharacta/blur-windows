@@ -16,8 +16,16 @@ cbuffer BoxParams : register(b0) {
     float2 texelSize;
     int radius;
     float strength;
+    float noiseIntensity;
+    float noiseScale;
+    float time;
+    float padding; // Alignment
     float4 tintColor;
 };
+
+float random(float2 st) {
+    return frac(sin(dot(st.xy, float2(12.9898, 78.233))) * 43758.5453123);
+}
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
     float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -159,11 +167,25 @@ public:
         m_tintColor[3] = a;
     }
 
+    void SetNoiseIntensity(float intensity) override {
+        m_noiseIntensity = std::clamp(intensity, 0.0f, 1.0f);
+    }
+    void SetNoiseScale(float scale) override {
+        m_noiseScale = std::clamp(scale, 1.0f, 1000.0f);
+    }
+    void SetNoiseSpeed(float speed) override {}
+    void SetNoiseType(int type) override {}
+    void Update(float deltaTime) override {}
+
 private:
     struct BoxParams {
         float texelSize[2];
         int radius;
         float strength;
+        float noiseIntensity;
+        float noiseScale;
+        float time;
+        float padding;
         float tintColor[4];
     };
 
@@ -194,6 +216,12 @@ private:
     int m_radius = 3;
     float m_strength = 1.0f;
     float m_tintColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    // Noise parameters
+    float m_noiseIntensity = 0.0f;
+    float m_noiseScale = 100.0f;
+    float m_noiseSpeed = 1.0f;
+    float m_currentTime = 0.0f;
 };
 
 // Factory function

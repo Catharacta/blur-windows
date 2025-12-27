@@ -115,6 +115,18 @@ BLURWINDOW_API BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const ch
 /// @return Error code
 BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds);
 
+/// Set noise intensity (0.0 to 1.0)
+BLURWINDOW_API BlurErrorCode blur_set_noise_intensity(BlurWindowHandle window, float intensity);
+
+/// Set noise scale (1.0 to 1000.0)
+BLURWINDOW_API BlurErrorCode blur_set_noise_scale(BlurWindowHandle window, float scale);
+
+/// Set noise animation speed
+BLURWINDOW_API BlurErrorCode blur_set_noise_speed(BlurWindowHandle window, float speed);
+
+/// Set noise type (0: White, 1: Sinusoid, 2: Grid, 3: Perlin, 4: Simplex)
+BLURWINDOW_API BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_t type);
+
 /// Get current FPS
 /// @param window Window handle
 /// @return Current FPS, or -1 on error
