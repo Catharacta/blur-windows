@@ -95,7 +95,7 @@ public:
         return json;
     }
 
-    static std::unique_ptr<EffectPipeline> FromJson(const std::string& json, ID3D11Device* device) {
+    static std::unique_ptr<EffectPipeline> FromJson(const std::string& /*json*/, ID3D11Device* device) {
         auto pipeline = std::make_unique<EffectPipeline>();
         pipeline->m_device = device;
         
