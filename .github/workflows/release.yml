@@ -35,10 +35,10 @@ jobs:
           mkdir release_pkg/include/blurwindow -Force
           
           # Copy Binaries
-          copy build/Release/blurwindow.dll release_pkg/bin/
+          copy build/bin/Release/blurwindow.dll release_pkg/bin/
           
           # Copy Libs
-          copy build/Release/blurwindow.lib release_pkg/lib/
+          copy build/lib/Release/blurwindow.lib release_pkg/lib/
           
           # Copy Headers
           copy include/blurwindow/*.h release_pkg/include/blurwindow/
