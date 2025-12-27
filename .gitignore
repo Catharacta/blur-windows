@@ -37,3 +37,6 @@ Thumbs.db
 # Rust
 target/
 **/target/
+
+# Local handovers
+handover/
