@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include "Logger.h"
 
 #pragma comment(lib, "d3dcompiler.lib")
 
@@ -89,7 +90,7 @@ public:
 
         if (FAILED(hr)) {
             if (errorBlob) {
-                OutputDebugStringA(static_cast<const char*>(errorBlob->GetBufferPointer()));
+                LOG_ERROR("VS Compilation Error: %s", (const char*)errorBlob->GetBufferPointer());
             }
             return false;
         }
@@ -137,7 +138,7 @@ public:
 
         if (FAILED(hr)) {
             if (errorBlob) {
-                OutputDebugStringA(static_cast<const char*>(errorBlob->GetBufferPointer()));
+                LOG_ERROR("PS Compilation Error: %s", (const char*)errorBlob->GetBufferPointer());
             }
             return false;
         }

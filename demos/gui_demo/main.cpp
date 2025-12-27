@@ -40,6 +40,7 @@ HWND g_hStatusText = NULL;
 #define ID_RADIO_NOISE_PERLIN   1039
 #define ID_RADIO_NOISE_SIMPLEX  1040
 #define ID_COMBO_EFFECT 1041
+#define ID_RADIO_NOISE_VORONOI  1042
 
 HWND g_hComboEffect = NULL;
  
@@ -97,6 +98,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Gaussian");
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Kawase");
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Box");
+        SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Radial");
         SendMessage(g_hComboEffect, CB_SETCURSEL, 0, 0);
 
         y += 40;
@@ -133,9 +135,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateWindow(L"BUTTON", L"White", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, x, y, 70, 20, hwnd, (HMENU)ID_RADIO_NOISE_WHITE, NULL, NULL);
         CreateWindow(L"BUTTON", L"Sin", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 80, y, 60, 20, hwnd, (HMENU)ID_RADIO_NOISE_SIN, NULL, NULL);
         CreateWindow(L"BUTTON", L"Grid", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 150, y, 60, 20, hwnd, (HMENU)ID_RADIO_NOISE_GRID, NULL, NULL);
-        CreateWindow(L"BUTTON", L"Perlin", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 220, y, 70, 20, hwnd, (HMENU)ID_RADIO_NOISE_PERLIN, NULL, NULL);
-        CreateWindow(L"BUTTON", L"Simplex", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 300, y, 80, 20, hwnd, (HMENU)ID_RADIO_NOISE_SIMPLEX, NULL, NULL);
-        CheckRadioButton(hwnd, ID_RADIO_NOISE_WHITE, ID_RADIO_NOISE_SIMPLEX, ID_RADIO_NOISE_WHITE);
+        CreateWindow(L"BUTTON", L"Perlin", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 240, y, 70, 20, hwnd, (HMENU)ID_RADIO_NOISE_PERLIN, NULL, NULL);
+        CreateWindow(L"BUTTON", L"Simplex", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 310, y, 70, 20, hwnd, (HMENU)ID_RADIO_NOISE_SIMPLEX, NULL, NULL);
+        CreateWindow(L"BUTTON", L"Voronoi", WS_VISIBLE | WS_CHILD | BS_AUTORADIOBUTTON, x + 380, y, 70, 20, hwnd, (HMENU)ID_RADIO_NOISE_VORONOI, NULL, NULL);
+        CheckRadioButton(hwnd, ID_RADIO_NOISE_WHITE, ID_RADIO_NOISE_VORONOI, ID_RADIO_NOISE_WHITE);
 
         y += 30;
         CreateWindow(L"STATIC", L"Status:", WS_VISIBLE | WS_CHILD, x, y, 60, 20, hwnd, NULL, NULL, NULL);
@@ -208,6 +211,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case ID_RADIO_NOISE_SIN:
         case ID_RADIO_NOISE_PERLIN:
         case ID_RADIO_NOISE_SIMPLEX:
+        case ID_RADIO_NOISE_VORONOI:
             if (g_blurWindow) {
                 int type = wmId - ID_RADIO_NOISE_WHITE;
                 g_blurWindow->SetNoiseType(type);
@@ -222,10 +226,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 const char* configs[] = {
                     "{\"pipeline\": [{\"type\": \"gaussian\"}]}",
                     "{\"pipeline\": [{\"type\": \"kawase\"}]}",
-                    "{\"pipeline\": [{\"type\": \"box\"}]}"
+                    "{\"pipeline\": [{\"type\": \"box\"}]}",
+                    "{\"pipeline\": [{\"type\": \"radial\"}]}"
                 };
-                const wchar_t* names[] = { L"Gaussian", L"Kawase", L"Box" };
-                if (sel >= 0 && sel < 3) {
+                const wchar_t* names[] = { L"Gaussian", L"Kawase", L"Box", L"Radial" };
+                if (sel >= 0 && sel < 4) {
                     if (g_blurWindow->SetEffectPipeline(configs[sel])) {
                         AppendLog(std::wstring(L"Effect changed to ") + names[sel]);
                     } else {

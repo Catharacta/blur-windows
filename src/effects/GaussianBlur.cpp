@@ -55,6 +55,25 @@ float simplexNoise(float2 uv) {
     return dot(n, float3(1.0, 1.0, 1.0)) * 40.0;
 }
 
+// Voronoi noise for frosted glass effect
+float voronoi(float2 uv) {
+    float2 n = floor(uv);
+    float2 f = frac(uv);
+    float m = 8.0f;
+    [unroll]
+    for (int j = -1; j <= 1; j++) {
+        [unroll]
+        for (int i = -1; i <= 1; i++) {
+            float2 g = float2((float)i, (float)j);
+            float2 o = float2(random(n + g), random(n + g + float2(123.4f, 567.8f)));
+            o = 0.5f + 0.5f * sin(time + 6.2831f * o);
+            float d = distance(g + o, f);
+            m = min(m, d);
+        }
+    }
+    return m;
+}
+
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
     float4 color = inputTexture.Sample(linearSampler, texcoord);
     if (noiseIntensity <= 0) return color;
@@ -65,17 +84,19 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     if (noiseType == 0) { // White
         n = random(uv + time) - 0.5f;
     } else if (noiseType == 1) { // Sinusoid (Exaggerated)
-        float s1 = sin(uv.x * 2.5 + time) * sin(uv.y * 1.8 + time * 0.7);
-        float s2 = sin(uv.x * 0.5 - time * 0.3) * sin(uv.y * 0.4 + time * 0.2);
-        n = (s1 * 0.7 + s2 * 0.3) * 2.0;
+        float s1 = sin(uv.x * 2.5f + time) * sin(uv.y * 1.8f + time * 0.7f);
+        float s2 = sin(uv.x * 0.5f - time * 0.3f) * sin(uv.y * 0.4f + time * 0.2f);
+        n = (s1 * 0.7f + s2 * 0.3f) * 2.0f;
     } else if (noiseType == 2) { // Grid (Exaggerated)
-        float2 grid = frac(uv * 0.05);
-        float line = step(0.96, grid.x) + step(0.96, grid.y);
-        n = (line > 0.5) ? 1.5 : -0.3;
+        float2 grid = frac(uv * 0.05f);
+        float gridLine = step(0.96f, grid.x) + step(0.96f, grid.y);
+        n = (gridLine > 0.5f) ? 1.5f : -0.3f;
     } else if (noiseType == 3) { // Perlin (High Contrast)
-        n = perlinNoise(uv * 0.3) * 2.5;
+        n = perlinNoise(uv * 0.3f) * 2.5f;
     } else if (noiseType == 4) { // Simplex (High Contrast)
-        n = simplexNoise(uv * 0.15) * 3.5;
+        n = simplexNoise(uv * 0.15f) * 3.5f;
+    } else if (noiseType == 5) { // Voronoi
+        n = (1.0f - voronoi(uv * 0.2f)) * 2.0f - 0.5f;
     }
 
     color.rgb += n * noiseIntensity;
@@ -176,7 +197,7 @@ public:
             device, g_NoisePS, strlen(g_NoisePS),
             "main", m_noisePS.GetAddressOf()
         )) {
-            OutputDebugStringA("Failed to compile Noise shader\n");
+            LOG_ERROR("Failed to compile Gaussian Noise shader");
             return false;
         }
 
@@ -185,7 +206,7 @@ public:
             device, g_GaussianBlurH, strlen(g_GaussianBlurH),
             "main", m_horizontalPS.GetAddressOf()
         )) {
-            OutputDebugStringA("Failed to compile GaussianBlurH shader\n");
+            LOG_ERROR("Failed to compile GaussianBlurH shader");
             return false;
         }
 
@@ -193,7 +214,7 @@ public:
             device, g_GaussianBlurV, strlen(g_GaussianBlurV),
             "main", m_verticalPS.GetAddressOf()
         )) {
-            OutputDebugStringA("Failed to compile GaussianBlurV shader\n");
+            LOG_ERROR("Failed to compile GaussianBlurV shader");
             return false;
         }
         
@@ -202,7 +223,7 @@ public:
             device, g_CompositePS, strlen(g_CompositePS),
             "main", m_compositePS.GetAddressOf()
         )) {
-            OutputDebugStringA("Failed to compile Composite shader\n");
+            LOG_ERROR("Failed to compile Gaussian Composite shader");
             return false;
         }
         
@@ -375,7 +396,7 @@ public:
     }
 
     void SetNoiseType(int type) override {
-        m_noiseType = std::clamp(type, 0, 4);
+        m_noiseType = std::clamp(type, 0, 5);
     }
 
     void Update(float deltaTime) override {
