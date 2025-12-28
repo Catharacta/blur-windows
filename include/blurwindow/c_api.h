@@ -213,6 +213,13 @@ BLURWINDOW_API BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_
 // --- Utility ---
 
 /**
+ * @brief Get the native window handle (HWND) for the blur window.
+ * @param window Window handle.
+ * @return Native HWND, or NULL if invalid.
+ */
+BLURWINDOW_API void* blur_get_hwnd(BlurWindowHandle window);
+
+/**
  * @brief Get current FPS for the window.
  * @return Current frames per second.
  */

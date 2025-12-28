@@ -124,6 +124,15 @@ BLURWINDOW_API BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_
 
 ## ユーティリティ
 
+### `blur_get_hwnd`
+```c
+BLURWINDOW_API void* blur_get_hwnd(BlurWindowHandle window);
+```
+ブラーウィンドウのネイティブウィンドウハンドル (HWND) を取得します。
+Zオーダー制御など、Win32 API を直接操作する場合に使用します。
+
+**戻り値**: ネイティブ HWND、無効な場合は NULL
+
 ### `blur_get_fps`
 ```c
 BLURWINDOW_API float blur_get_fps(BlurWindowHandle window);
