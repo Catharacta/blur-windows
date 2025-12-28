@@ -104,21 +104,23 @@ public:
     }
 
     void SetBounds(const RECT& bounds) {
-        m_options.bounds = bounds;
-        m_width = bounds.right - bounds.left;
-        m_height = bounds.bottom - bounds.top;
+        // Window操作は即時実行（UIスレッドから呼ばれることが期待される）
+        int newWidth = bounds.right - bounds.left;
+        int newHeight = bounds.bottom - bounds.top;
         
         if (m_hwnd) {
             SetWindowPos(m_hwnd, nullptr,
                 bounds.left, bounds.top,
-                m_width, m_height,
+                newWidth, newHeight,
                 SWP_NOZORDER | SWP_NOACTIVATE
             );
         }
         
-        // Recreate output texture
-        if (m_device) {
-            CreateOutputTexture();
+        // D3Dリソースの再作成はRenderLoop内で安全に処理
+        {
+            std::lock_guard<std::mutex> lock(m_graphicsMutex);
+            m_pendingBounds = bounds;
+            m_resizeRequested = true;
         }
     }
 
@@ -449,6 +451,17 @@ private:
             
             static bool firstFrameLogged = false;
             
+            // リサイズ要求の処理（RenderLoop内で安全にD3Dリソースを再作成）
+            if (m_resizeRequested.exchange(false)) {
+                m_options.bounds = m_pendingBounds;
+                m_width = m_pendingBounds.right - m_pendingBounds.left;
+                m_height = m_pendingBounds.bottom - m_pendingBounds.top;
+                if (m_width > 0 && m_height > 0 && m_device) {
+                    CreateOutputTexture();
+                    LOG_INFO("Output texture resized to %dx%d in RenderLoop.", m_width, m_height);
+                }
+            }
+            
             { // Strict lock around all D3D11 context usage
                 std::lock_guard<std::mutex> lock(m_graphicsMutex);
                 if (m_graphicsInitialized && m_capture && m_effect && m_presenter) {
@@ -584,6 +597,10 @@ private:
     float m_noiseSpeed = 1.0f;
     int m_noiseType = 0;
     float m_tintColor[4] = { 0, 0, 0, 0 };
+
+    // Resize request handling (deferred to RenderLoop for thread safety)
+    std::atomic<bool> m_resizeRequested{false};
+    RECT m_pendingBounds = {};
 
     // Graphics resources
     ID3D11Device* m_device = nullptr;
