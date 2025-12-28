@@ -102,6 +102,12 @@ BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     if (!bounds) return BLUR_ERROR_INVALID_PARAMETER;
     
+    // Validate bounds
+    if (bounds->right <= bounds->left || bounds->bottom <= bounds->top) {
+        g_lastError = "Invalid bounds: width and height must be positive";
+        return BLUR_ERROR_INVALID_PARAMETER;
+    }
+    
     auto* w = reinterpret_cast<BlurWindow*>(window);
     RECT r = {bounds->left, bounds->top, bounds->right, bounds->bottom};
     w->SetBounds(r);
