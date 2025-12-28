@@ -170,6 +170,12 @@ BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_t type) {
     return BLUR_OK;
 }
 
+void* blur_get_hwnd(BlurWindowHandle window) {
+    if (!window) return nullptr;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    return w->GetHWND();
+}
+
 float blur_get_fps(BlurWindowHandle window) {
     if (!window) return -1.0f;
     
