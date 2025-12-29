@@ -9,7 +9,7 @@ static std::string g_lastError;
 
 extern "C" {
 
-BlurSystemHandle blur_init(const BlurSystemOptionsC* opts) {
+BLURWINDOW_API BlurSystemHandle blur_init(const BlurSystemOptionsC* opts) {
     BlurSystemOptions options = {};
     
     if (opts) {
@@ -26,13 +26,13 @@ BlurSystemHandle blur_init(const BlurSystemOptionsC* opts) {
     return reinterpret_cast<BlurSystemHandle>(&BlurSystem::Instance());
 }
 
-void blur_shutdown(BlurSystemHandle sys) {
+BLURWINDOW_API void blur_shutdown(BlurSystemHandle sys) {
     if (sys) {
         BlurSystem::Instance().Shutdown();
     }
 }
 
-BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* owner, const BlurWindowOptionsC* opts) {
+BLURWINDOW_API BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* owner, const BlurWindowOptionsC* opts) {
     if (!sys || !opts) {
         g_lastError = "Invalid parameters";
         return nullptr;
@@ -56,13 +56,13 @@ BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* owner, const Blu
     return reinterpret_cast<BlurWindowHandle>(window.release());
 }
 
-void blur_destroy_window(BlurWindowHandle window) {
+BLURWINDOW_API void blur_destroy_window(BlurWindowHandle window) {
     if (window) {
         delete reinterpret_cast<BlurWindow*>(window);
     }
 }
 
-BlurErrorCode blur_start(BlurWindowHandle window) {
+BLURWINDOW_API BlurErrorCode blur_start(BlurWindowHandle window) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     
     auto* w = reinterpret_cast<BlurWindow*>(window);
@@ -70,7 +70,7 @@ BlurErrorCode blur_start(BlurWindowHandle window) {
     return BLUR_OK;
 }
 
-BlurErrorCode blur_stop(BlurWindowHandle window) {
+BLURWINDOW_API BlurErrorCode blur_stop(BlurWindowHandle window) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     
     auto* w = reinterpret_cast<BlurWindow*>(window);
@@ -78,7 +78,7 @@ BlurErrorCode blur_stop(BlurWindowHandle window) {
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_preset(BlurWindowHandle window, BlurQualityPreset preset) {
+BLURWINDOW_API BlurErrorCode blur_set_preset(BlurWindowHandle window, BlurQualityPreset preset) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     
     auto* w = reinterpret_cast<BlurWindow*>(window);
@@ -86,7 +86,7 @@ BlurErrorCode blur_set_preset(BlurWindowHandle window, BlurQualityPreset preset)
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const char* json_config) {
+BLURWINDOW_API BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const char* json_config) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     if (!json_config) return BLUR_ERROR_INVALID_PARAMETER;
     
@@ -98,7 +98,7 @@ BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const char* json_config
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds) {
+BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     if (!bounds) return BLUR_ERROR_INVALID_PARAMETER;
     
@@ -114,80 +114,80 @@ BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds) {
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_noise_intensity(BlurWindowHandle window, float intensity) {
+BLURWINDOW_API BlurErrorCode blur_set_noise_intensity(BlurWindowHandle window, float intensity) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);
     w->SetNoiseIntensity(intensity);
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_effect_type(BlurWindowHandle window, int32_t type) {
+BLURWINDOW_API BlurErrorCode blur_set_effect_type(BlurWindowHandle window, int32_t type) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);
     w->SetEffectType(type);
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_strength(BlurWindowHandle window, float strength) {
+BLURWINDOW_API BlurErrorCode blur_set_strength(BlurWindowHandle window, float strength) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);
     w->SetBlurStrength(strength);
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_blur_param(BlurWindowHandle window, float param) {
+BLURWINDOW_API BlurErrorCode blur_set_blur_param(BlurWindowHandle window, float param) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);
     w->SetBlurParam(param);
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_tint_color(BlurWindowHandle window, float r, float g, float b, float a) {
+BLURWINDOW_API BlurErrorCode blur_set_tint_color(BlurWindowHandle window, float r, float g, float b, float a) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);
     w->SetBlurColor(r, g, b, a);
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_noise_scale(BlurWindowHandle window, float scale) {
+BLURWINDOW_API BlurErrorCode blur_set_noise_scale(BlurWindowHandle window, float scale) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);
     w->SetNoiseScale(scale);
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_noise_speed(BlurWindowHandle window, float speed) {
+BLURWINDOW_API BlurErrorCode blur_set_noise_speed(BlurWindowHandle window, float speed) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);
     w->SetNoiseSpeed(speed);
     return BLUR_OK;
 }
 
-BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_t type) {
+BLURWINDOW_API BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_t type) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);
     w->SetNoiseType(type);
     return BLUR_OK;
 }
 
-void* blur_get_hwnd(BlurWindowHandle window) {
+BLURWINDOW_API void* blur_get_hwnd(BlurWindowHandle window) {
     if (!window) return nullptr;
     auto* w = reinterpret_cast<BlurWindow*>(window);
     return w->GetHWND();
 }
 
-float blur_get_fps(BlurWindowHandle window) {
+BLURWINDOW_API float blur_get_fps(BlurWindowHandle window) {
     if (!window) return -1.0f;
     
     auto* w = reinterpret_cast<BlurWindow*>(window);
     return w->GetCurrentFPS();
 }
 
-const char* blur_get_last_error(void) {
+BLURWINDOW_API const char* blur_get_last_error(void) {
     return g_lastError.c_str();
 }
 
-void blur_enable_logging(BlurSystemHandle sys, int32_t enable, const char* path) {
+BLURWINDOW_API void blur_enable_logging(BlurSystemHandle sys, int32_t enable, const char* path) {
     // TODO: Implement logging control
     (void)sys;
     (void)enable;
