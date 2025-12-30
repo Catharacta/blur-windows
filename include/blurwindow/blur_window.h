@@ -70,6 +70,23 @@ public:
     /// Set blur-specific parameter (Sigma for Gaussian, Radius for Box, Iterations for Kawase)
     void SetBlurParam(float param);
 
+    // --- Rain Effect Control ---
+
+    /// Set rain effect intensity (0.0 to 1.0)
+    void SetRainIntensity(float intensity);
+
+    /// Set raindrop fall speed (0.1 to 5.0)
+    void SetRainDropSpeed(float speed);
+
+    /// Set refraction strength (0.0 to 1.0)
+    void SetRainRefraction(float strength);
+
+    /// Set trail length (0.0 to 1.0)
+    void SetRainTrailLength(float length);
+
+    /// Set drop size range (in pixels)
+    void SetRainDropSize(float minSize, float maxSize);
+
     /// Enable/disable click-through
     /// @param enable true to enable click-through
     void SetClickThrough(bool enable);

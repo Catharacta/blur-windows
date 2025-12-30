@@ -1,6 +1,7 @@
 #include "blurwindow/c_api.h"
 #include "blurwindow/blurwindow.h"
 #include "blurwindow/blur_window.h"
+#include "../effects/RainEffect.h"
 #include <string>
 
 using namespace blurwindow;
@@ -192,6 +193,43 @@ BLURWINDOW_API void blur_enable_logging(BlurSystemHandle sys, int32_t enable, co
     (void)sys;
     (void)enable;
     (void)path;
+}
+
+// --- Rain Effect Control ---
+
+BLURWINDOW_API BlurErrorCode blur_set_rain_intensity(BlurWindowHandle window, float intensity) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetRainIntensity(intensity);
+    return BLUR_OK;
+}
+
+BLURWINDOW_API BlurErrorCode blur_set_rain_drop_speed(BlurWindowHandle window, float speed) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetRainDropSpeed(speed);
+    return BLUR_OK;
+}
+
+BLURWINDOW_API BlurErrorCode blur_set_rain_refraction(BlurWindowHandle window, float strength) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetRainRefraction(strength);
+    return BLUR_OK;
+}
+
+BLURWINDOW_API BlurErrorCode blur_set_rain_trail_length(BlurWindowHandle window, float length) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetRainTrailLength(length);
+    return BLUR_OK;
+}
+
+BLURWINDOW_API BlurErrorCode blur_set_rain_drop_size(BlurWindowHandle window, float minSize, float maxSize) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetRainDropSize(minSize, maxSize);
+    return BLUR_OK;
 }
 
 } // extern "C"

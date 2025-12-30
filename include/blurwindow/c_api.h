@@ -210,6 +210,49 @@ BLURWINDOW_API BlurErrorCode blur_set_noise_speed(BlurWindowHandle window, float
  */
 BLURWINDOW_API BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_t type);
 
+// --- Rain Effect Control ---
+
+/**
+ * @brief Set the rain effect intensity (density of raindrops).
+ * @param window Window handle.
+ * @param intensity 0.0 (no rain) to 1.0 (heavy rain).
+ * @return BLUR_OK on success.
+ */
+BLURWINDOW_API BlurErrorCode blur_set_rain_intensity(BlurWindowHandle window, float intensity);
+
+/**
+ * @brief Set the raindrop fall speed multiplier.
+ * @param window Window handle.
+ * @param speed 0.1 (slow) to 5.0 (fast).
+ * @return BLUR_OK on success.
+ */
+BLURWINDOW_API BlurErrorCode blur_set_rain_drop_speed(BlurWindowHandle window, float speed);
+
+/**
+ * @brief Set the refraction strength for raindrops.
+ * @param window Window handle.
+ * @param strength 0.0 (no refraction) to 1.0 (maximum refraction).
+ * @return BLUR_OK on success.
+ */
+BLURWINDOW_API BlurErrorCode blur_set_rain_refraction(BlurWindowHandle window, float strength);
+
+/**
+ * @brief Set the trail length for falling raindrops.
+ * @param window Window handle.
+ * @param length 0.0 (no trail) to 1.0 (long trail).
+ * @return BLUR_OK on success.
+ */
+BLURWINDOW_API BlurErrorCode blur_set_rain_trail_length(BlurWindowHandle window, float length);
+
+/**
+ * @brief Set the size range for raindrops.
+ * @param window Window handle.
+ * @param minSize Minimum drop radius in pixels.
+ * @param maxSize Maximum drop radius in pixels.
+ * @return BLUR_OK on success.
+ */
+BLURWINDOW_API BlurErrorCode blur_set_rain_drop_size(BlurWindowHandle window, float minSize, float maxSize);
+
 // --- Utility ---
 
 /**

@@ -3,6 +3,7 @@
 #include "Logger.h"
 #include "SubsystemFactory.h"
 #include "FullscreenRenderer.h"
+#include "../effects/RainEffect.h"
 #include <atomic>
 #include <chrono>
 #include <mutex>
@@ -225,6 +226,38 @@ public:
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
         m_noiseType = type;
         if (m_effect) m_effect->SetNoiseType(type);
+    }
+
+    // --- Rain Effect Control ---
+
+    void SetRainIntensity(float intensity) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        if (rain) rain->SetRainIntensity(intensity);
+    }
+
+    void SetRainDropSpeed(float speed) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        if (rain) rain->SetDropSpeed(speed);
+    }
+
+    void SetRainRefraction(float strength) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        if (rain) rain->SetRefractionStrength(strength);
+    }
+
+    void SetRainTrailLength(float length) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        if (rain) rain->SetTrailLength(length);
+    }
+
+    void SetRainDropSize(float minSize, float maxSize) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        if (rain) rain->SetDropSizeRange(minSize, maxSize);
     }
 
     bool IsInitialized() const {
@@ -703,6 +736,26 @@ void BlurWindow::SetEffectType(int type) {
 
 void BlurWindow::SetBlurParam(float param) {
     m_impl->SetBlurParam(param);
+}
+
+void BlurWindow::SetRainIntensity(float intensity) {
+    m_impl->SetRainIntensity(intensity);
+}
+
+void BlurWindow::SetRainDropSpeed(float speed) {
+    m_impl->SetRainDropSpeed(speed);
+}
+
+void BlurWindow::SetRainRefraction(float strength) {
+    m_impl->SetRainRefraction(strength);
+}
+
+void BlurWindow::SetRainTrailLength(float length) {
+    m_impl->SetRainTrailLength(length);
+}
+
+void BlurWindow::SetRainDropSize(float minSize, float maxSize) {
+    m_impl->SetRainDropSize(minSize, maxSize);
 }
 
 void BlurWindow::SetClickThrough(bool enable) {
