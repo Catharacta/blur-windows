@@ -13,6 +13,8 @@ namespace blurwindow {
 std::unique_ptr<IBlurEffect> CreateGaussianBlur();
 std::unique_ptr<IBlurEffect> CreateKawaseBlur();
 std::unique_ptr<IBlurEffect> CreateBoxBlur();
+std::unique_ptr<IBlurEffect> CreateRadialBlur();
+std::unique_ptr<IBlurEffect> CreateRainEffect();
 
 /// Simple JSON-like config parser (no external dependencies)
 class ConfigManager {
@@ -72,6 +74,12 @@ public:
             return CreateGaussianBlur();
         } else if (type == "box" || type == "Box") {
             return CreateBoxBlur();
+        } else if (type == "kawase" || type == "Kawase") {
+            return CreateKawaseBlur();
+        } else if (type == "radial" || type == "Radial") {
+            return CreateRadialBlur();
+        } else if (type == "rain" || type == "Rain") {
+            return CreateRainEffect();
         }
         return nullptr;
     }
