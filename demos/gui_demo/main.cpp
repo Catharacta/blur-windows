@@ -416,7 +416,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     HWND hwnd = CreateWindowEx(
         0, CLASS_NAME, L"BlurWindow Library GUI Demo",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 600, 680,
+        CW_USEDEFAULT, CW_USEDEFAULT, 600, 880,
         NULL, NULL, hInstance, NULL
     );
 

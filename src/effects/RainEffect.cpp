@@ -1,6 +1,7 @@
 #include "RainEffect.h"
 #include "../core/ShaderLoader.h"
 #include "../core/FullscreenRenderer.h"
+#include "../core/Logger.h"
 #include <cstring>
 #include <cstdio>
 #include <algorithm>
@@ -174,9 +175,12 @@ bool RainEffect::Initialize(ID3D11Device* device) {
     
     // Initialize fullscreen renderer
     if (!m_fullscreenRenderer.Initialize(device)) {
+        LOG_ERROR("RainEffect::Initialize - FullscreenRenderer init failed");
         return false;
     }
     
+    LOG_INFO("RainEffect::Initialize - Success (refractionPS=%p, raindropPS=%p)",
+        m_refractionPS.Get(), m_raindropPS.Get());
     return true;
 }
 
@@ -188,17 +192,27 @@ bool RainEffect::Apply(
     uint32_t height
 ) {
     if (!m_refractionPS || !context || !input || !output) {
+        LOG_ERROR("RainEffect::Apply - Invalid state: refractionPS=%p, context=%p, input=%p, output=%p",
+            m_refractionPS.Get(), context, input, output);
         return false;
     }
     
     // Create/update drop texture if needed (before setting m_lastWidth/Height)
     if (!CreateDropTexture(width, height)) {
+        LOG_ERROR("RainEffect::Apply - CreateDropTexture failed");
         return false;
     }
     
     // Store dimensions for simulation (after texture creation)
     m_lastWidth = width;
     m_lastHeight = height;
+    
+    // Debug log (every ~60 frames to avoid spam)
+    static int frameCount = 0;
+    if (++frameCount % 60 == 0) {
+        LOG_INFO("RainEffect: drops=%zu, staticDrops=%zu, intensity=%.2f, dropTexture=%p",
+            m_drops.size(), m_staticDrops.size(), m_rainIntensity, m_dropTexture.Get());
+    }
     
     // Set viewport for all passes
     D3D11_VIEWPORT viewport = {};
