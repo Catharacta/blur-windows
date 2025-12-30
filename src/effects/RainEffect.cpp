@@ -62,23 +62,43 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
 // Refraction/composite pixel shader - Codrops compatible
 // Applies the drop texture to create the final refraction effect
 static const char* g_RefractionPS = R"(
-Texture2D backgroundBlurred : register(t0);  // Blurred background
+Texture2D backgroundBlurred : register(t0);  // Background (will be blurred in shader)
 Texture2D backgroundFocus : register(t1);    // Sharp/focused background for drops
 Texture2D dropTexture : register(t2);         // Drop data (R=Y offset, G=X offset, B=depth, A=mask)
 SamplerState linearSampler : register(s0);
 
 cbuffer RefractionParams : register(b0) {
     float refractionStrength;  // 0-1, scaled to pixel range
-    float blurAmount;
+    float blurAmount;          // Background blur amount
     float2 resolution;         // Screen resolution for pixel calculations
 };
+
+// Simple 5-tap blur for background (simulates looking through glass)
+float4 blurBackground(float2 uv) {
+    float2 pixelSize = 1.0 / resolution;
+    float blurRadius = blurAmount * 8.0 + 2.0; // 2-10 pixel blur
+    
+    float4 color = float4(0, 0, 0, 0);
+    float total = 0.0;
+    
+    // Sample in a cross pattern for performance
+    for (int i = -2; i <= 2; ++i) {
+        for (int j = -2; j <= 2; ++j) {
+            float2 offset = float2(i, j) * pixelSize * blurRadius * 0.5;
+            float weight = 1.0 / (1.0 + abs(i) + abs(j));
+            color += backgroundBlurred.Sample(linearSampler, uv + offset) * weight;
+            total += weight;
+        }
+    }
+    return color / total;
+}
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
     // Sample drop texture
     float4 drop = dropTexture.Sample(linearSampler, texcoord);
     
-    // Get blurred background
-    float4 blurred = backgroundBlurred.Sample(linearSampler, texcoord);
+    // Get blurred background (looking through frosted glass effect)
+    float4 blurred = blurBackground(texcoord);
     
     // If no drop at this pixel, return blurred background
     if (drop.a < 0.01) {
@@ -105,6 +125,7 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     refractedUV = clamp(refractedUV, float2(0.001, 0.001), float2(0.999, 0.999));
     
     // Sample focused background through refraction (the "lens" effect)
+    // Water drops act as lenses showing a clearer view
     float4 refracted = backgroundFocus.Sample(linearSampler, refractedUV);
     
     // Codrops-style alpha processing: alphaMultiply=20, alphaSubtract=5
@@ -423,7 +444,10 @@ void RainEffect::UpdateDrops(float deltaTime) {
                 float dx = drop2.x - drop.x;
                 float dy = drop2.y - drop.y;
                 float d = std::sqrt(dx*dx + dy*dy);
-                float threshold = (drop.radius + drop2.radius) * 0.001f * m_collisionRadius;
+                // Convert radius to normalized coordinates for comparison
+                float normRadius1 = drop.radius / static_cast<float>(m_lastWidth);
+                float normRadius2 = drop2.radius / static_cast<float>(m_lastWidth);
+                float threshold = (normRadius1 + normRadius2) * m_collisionRadius;
                 
                 if (d < threshold) {
                     // Merge drops
@@ -573,22 +597,29 @@ void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width,
                 
                 if (dist > 1.0f) continue;
                 
-                float height_val = std::sqrt(1.0f - dist * dist);
+                // Smoother height profile for more natural look
+                float t = 1.0f - dist;
+                float height_val = t * t * (3.0f - 2.0f * t); // Smoothstep
+                
+                // Add slight variation for organic look
+                float variation = 1.0f + std::sin(ex * 3.14159f * 2.0f) * 0.05f;
+                height_val *= variation;
                 
                 // Calculate normal for refraction
-                float nx = ex;
-                float ny = ey;
+                float nx = ex * (1.0f - height_val * 0.5f);
+                float ny = ey * (1.0f - height_val * 0.5f);
                 float len = std::sqrt(nx * nx + ny * ny + height_val * height_val);
                 if (len > 0) {
                     nx /= len;
                     ny /= len;
                 }
                 
-                // Map to 0-255 range
+                // Map to 0-255 range with softer edges
+                float edgeFade = (1.0f - dist) * (1.0f - dist);
                 uint8_t r = static_cast<uint8_t>((ny * 0.5f + 0.5f) * 255);
                 uint8_t g = static_cast<uint8_t>((nx * 0.5f + 0.5f) * 255);
                 uint8_t b = static_cast<uint8_t>(height_val * 255);
-                uint8_t a = static_cast<uint8_t>(height_val * (1.0f - dist * dist * 0.5f) * 255);
+                uint8_t a = static_cast<uint8_t>(height_val * edgeFade * 255);
                 
                 size_t idx = (py * width + px) * 4;
                 if (a > dropData[idx + 3]) {
