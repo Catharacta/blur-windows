@@ -124,9 +124,9 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     // Clamp to valid UV range
     refractedUV = clamp(refractedUV, float2(0.001, 0.001), float2(0.999, 0.999));
     
-    // Sample focused background through refraction (the "lens" effect)
-    // Water drops act as lenses showing a clearer view
-    float4 refracted = backgroundFocus.Sample(linearSampler, refractedUV);
+    // Sample blurred background through refraction
+    // Water drops show refracted view of the already-blurred background
+    float4 refracted = blurBackground(refractedUV);
     
     // Codrops-style alpha processing: alphaMultiply=20, alphaSubtract=5
     float alpha = saturate(drop.a * 20.0 - 5.0);
