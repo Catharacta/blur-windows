@@ -87,12 +87,10 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     
     // Calculate refraction offset from drop texture
     // RG channels contain normal-mapped refraction direction (0.5 = no offset)
-    float2 offset = (drop.rg - 0.5) * 2.0 * refractionStrength;
+    float2 offset = (drop.rg - 0.5) * 2.0 * refractionStrength * 0.1;
     
     // Apply refraction to sample from focused background
-    // The drop acts like a lens, showing inverted/refracted view of background
     float2 refractedUV = texcoord + offset;
-    refractedUV.y = 1.0 - refractedUV.y; // Invert Y (lens effect)
     
     // Clamp to valid UV range
     refractedUV = clamp(refractedUV, float2(0.001, 0.001), float2(0.999, 0.999));
@@ -100,9 +98,9 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     // Sample focused background through refraction
     float4 refracted = backgroundFocus.Sample(linearSampler, refractedUV);
     
-    // Add slight darkening at edges for depth
-    float edgeDarkening = 1.0 - drop.a * 0.2;
-    refracted.rgb *= edgeDarkening;
+    // Add slight highlight at the "top" of the drop (where light would catch)
+    float highlight = saturate(drop.r - 0.5) * 2.0 * drop.a * 0.3;
+    refracted.rgb += float3(highlight, highlight, highlight);
     
     // Blend refracted view with blurred background based on drop alpha
     return lerp(blurred, refracted, drop.a);
@@ -491,11 +489,13 @@ void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width,
                 uint8_t a = static_cast<uint8_t>(height_val * (1.0f - normDist * normDist * 0.5f) * 255);
                 
                 size_t idx = (py * width + px) * 4;
-                // Blend with existing (max blend for alpha)
-                dropData[idx + 0] = (std::max)(dropData[idx + 0], r);
-                dropData[idx + 1] = (std::max)(dropData[idx + 1], g);
-                dropData[idx + 2] = 0;
-                dropData[idx + 3] = (std::max)(dropData[idx + 3], a);
+                // Direct write (no blend - latest drop wins)
+                if (a > dropData[idx + 3]) {
+                    dropData[idx + 0] = r;
+                    dropData[idx + 1] = g;
+                    dropData[idx + 2] = 0;
+                    dropData[idx + 3] = a;
+                }
             }
         }
     }
