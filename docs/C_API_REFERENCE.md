@@ -75,6 +75,7 @@ BLURWINDOW_API BlurErrorCode blur_set_effect_type(BlurWindowHandle window, int32
 - `1`: Kawase
 - `2`: Box
 - `3`: Radial
+- `4`: Rain (雨粒エフェクト)
 
 ### `blur_set_strength`
 ```c
@@ -119,6 +120,46 @@ BLURWINDOW_API BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_
 - `3`: Perlin
 - `4`: Simplex
 - `5`: Voronoi
+
+---
+
+## Rain Effect Control
+
+### `blur_set_rain_intensity`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_rain_intensity(BlurWindowHandle window, float intensity);
+```
+雨の密度を設定します。
+- `intensity`: 0.0 (雨なし) ～ 1.0 (大雨)
+
+### `blur_set_rain_drop_speed`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_rain_drop_speed(BlurWindowHandle window, float speed);
+```
+雨粒の落下速度を設定します。
+- `speed`: 0.1 (遅い) ～ 5.0 (速い)
+
+### `blur_set_rain_refraction`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_rain_refraction(BlurWindowHandle window, float strength);
+```
+雨粒の屈折強度を設定します。
+- `strength`: 0.0 (屈折なし) ～ 1.0 (最大屈折)
+
+### `blur_set_rain_trail_length`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_rain_trail_length(BlurWindowHandle window, float length);
+```
+落下中の雨粒の軌跡の長さを設定します。
+- `length`: 0.0 (軌跡なし) ～ 1.0 (長い軌跡)
+
+### `blur_set_rain_drop_size`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_rain_drop_size(BlurWindowHandle window, float minSize, float maxSize);
+```
+雨粒のサイズ範囲を設定します。
+- `minSize`: 最小半径 (ピクセル)
+- `maxSize`: 最大半径 (ピクセル)
 
 ---
 

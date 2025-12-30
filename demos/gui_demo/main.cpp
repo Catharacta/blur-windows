@@ -43,6 +43,12 @@ HWND g_hStatusText = NULL;
 #define ID_RADIO_NOISE_VORONOI  1042
 #define ID_SLIDER_TINT_ALPHA  1043
 #define ID_SLIDER_BLUR_PARAM  1044
+#define ID_SLIDER_RAIN_INTENSITY 1050
+#define ID_SLIDER_RAIN_SPEED     1051
+#define ID_SLIDER_RAIN_REFRACT   1052
+#define ID_SLIDER_RAIN_TRAIL     1053
+#define ID_SLIDER_RAIN_SIZE_MIN  1054
+#define ID_SLIDER_RAIN_SIZE_MAX  1055
 
 HWND g_hComboEffect = NULL;
 COLORREF g_tintColor = RGB(255, 255, 255);
@@ -103,6 +109,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Kawase");
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Box");
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Radial");
+        SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Rain");
         SendMessage(g_hComboEffect, CB_SETCURSEL, 0, 0);
 
         y += 40;
@@ -161,7 +168,51 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SendMessage(hTintAlpha, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
         SendMessage(hTintAlpha, TBM_SETPOS, TRUE, 0);
 
+        // Rain Effect Controls
+        y += 40;
+        CreateWindow(L"STATIC", L"--- Rain Effect ---", WS_VISIBLE | WS_CHILD, x, y, 150, 20, hwnd, NULL, NULL, NULL);
+        
+        y += 25;
+        CreateWindow(L"STATIC", L"Rain Intensity:", WS_VISIBLE | WS_CHILD, x, y, 110, 20, hwnd, NULL, NULL, NULL);
+        HWND hRainInt = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 25, hwnd, (HMENU)ID_SLIDER_RAIN_INTENSITY, NULL, NULL);
+        SendMessage(hRainInt, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+        SendMessage(hRainInt, TBM_SETPOS, TRUE, 50);
+
         y += 30;
+        CreateWindow(L"STATIC", L"Drop Speed:", WS_VISIBLE | WS_CHILD, x, y, 110, 20, hwnd, NULL, NULL, NULL);
+        HWND hRainSpeed = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 25, hwnd, (HMENU)ID_SLIDER_RAIN_SPEED, NULL, NULL);
+        SendMessage(hRainSpeed, TBM_SETRANGE, TRUE, MAKELONG(1, 50));
+        SendMessage(hRainSpeed, TBM_SETPOS, TRUE, 10);
+
+        y += 30;
+        CreateWindow(L"STATIC", L"Refraction:", WS_VISIBLE | WS_CHILD, x, y, 110, 20, hwnd, NULL, NULL, NULL);
+        HWND hRainRefract = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 25, hwnd, (HMENU)ID_SLIDER_RAIN_REFRACT, NULL, NULL);
+        SendMessage(hRainRefract, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+        SendMessage(hRainRefract, TBM_SETPOS, TRUE, 50);
+
+        y += 30;
+        CreateWindow(L"STATIC", L"Trail Length:", WS_VISIBLE | WS_CHILD, x, y, 110, 20, hwnd, NULL, NULL, NULL);
+        HWND hRainTrail = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 25, hwnd, (HMENU)ID_SLIDER_RAIN_TRAIL, NULL, NULL);
+        SendMessage(hRainTrail, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+        SendMessage(hRainTrail, TBM_SETPOS, TRUE, 30);
+
+        y += 30;
+        CreateWindow(L"STATIC", L"Drop Size Min:", WS_VISIBLE | WS_CHILD, x, y, 110, 20, hwnd, NULL, NULL, NULL);
+        HWND hRainSizeMin = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 140, 25, hwnd, (HMENU)ID_SLIDER_RAIN_SIZE_MIN, NULL, NULL);
+        SendMessage(hRainSizeMin, TBM_SETRANGE, TRUE, MAKELONG(1, 20));
+        SendMessage(hRainSizeMin, TBM_SETPOS, TRUE, 5);
+        CreateWindow(L"STATIC", L"Max:", WS_VISIBLE | WS_CHILD, x + 280, y, 40, 20, hwnd, NULL, NULL, NULL);
+        HWND hRainSizeMax = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 320, y, 140, 25, hwnd, (HMENU)ID_SLIDER_RAIN_SIZE_MAX, NULL, NULL);
+        SendMessage(hRainSizeMax, TBM_SETRANGE, TRUE, MAKELONG(5, 50));
+        SendMessage(hRainSizeMax, TBM_SETPOS, TRUE, 20);
+
+        y += 35;
         CreateWindow(L"STATIC", L"Status:", WS_VISIBLE | WS_CHILD, x, y, 60, 20, hwnd, NULL, NULL, NULL);
         g_hStatusText = CreateWindow(L"STATIC", L"Ready", WS_VISIBLE | WS_CHILD, x + 70, y, 300, 20, hwnd, NULL, NULL, NULL);
 
@@ -269,10 +320,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     "{\"pipeline\": [{\"type\": \"gaussian\"}]}",
                     "{\"pipeline\": [{\"type\": \"kawase\"}]}",
                     "{\"pipeline\": [{\"type\": \"box\"}]}",
-                    "{\"pipeline\": [{\"type\": \"radial\"}]}"
+                    "{\"pipeline\": [{\"type\": \"radial\"}]}",
+                    "{\"pipeline\": [{\"type\": \"rain\"}]}"
                 };
-                const wchar_t* names[] = { L"Gaussian", L"Kawase", L"Box", L"Radial" };
-                if (sel >= 0 && sel < 4) {
+                const wchar_t* names[] = { L"Gaussian", L"Kawase", L"Box", L"Radial", L"Rain" };
+                if (sel >= 0 && sel < 5) {
                     if (g_blurWindow->SetEffectPipeline(configs[sel])) {
                         AppendLog(std::wstring(L"Effect changed to ") + names[sel]);
                     } else {
@@ -309,6 +361,25 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_BLUR_PARAM)) {
             int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
             g_blurWindow->SetBlurParam((float)pos);
+        }
+        // Rain effect sliders
+        else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_INTENSITY)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_blurWindow->SetRainIntensity(pos / 100.0f);
+        } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_SPEED)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_blurWindow->SetRainDropSpeed(pos / 10.0f);
+        } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_REFRACT)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_blurWindow->SetRainRefraction(pos / 100.0f);
+        } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_TRAIL)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            g_blurWindow->SetRainTrailLength(pos / 100.0f);
+        } else if (g_blurWindow && ((HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_SIZE_MIN) ||
+                                    (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_SIZE_MAX))) {
+            int minPos = SendMessage(GetDlgItem(hwnd, ID_SLIDER_RAIN_SIZE_MIN), TBM_GETPOS, 0, 0);
+            int maxPos = SendMessage(GetDlgItem(hwnd, ID_SLIDER_RAIN_SIZE_MAX), TBM_GETPOS, 0, 0);
+            g_blurWindow->SetRainDropSize((float)minPos, (float)maxPos);
         }
         return 0;
     }
