@@ -42,15 +42,21 @@ public:
     void SetDropSizeRange(float minSize, float maxSize);
 
 private:
-    // Raindrop data structure
+    // Raindrop data structure (Codrops compatible)
     struct Raindrop {
         float x, y;           // Position (0-1 normalized)
         float radius;         // Radius in pixels
-        float velocity;       // Fall velocity
+        float momentum;       // Fall velocity (momentum)
+        float momentumX;      // Horizontal momentum (for collision)
+        float spreadX;        // X spread for teardrop shape
+        float spreadY;        // Y spread for teardrop shape
         float seed;           // Random seed for variation
-        bool isFalling;       // Currently falling/trailing
-        float trailY;         // Trail end Y position
-        float lifetime;       // Time since creation
+        float shrink;         // Shrink rate
+        float lastSpawn;      // Time since last trail spawn
+        float nextSpawn;      // Time until next trail spawn
+        bool killed;          // Marked for removal
+        bool isNew;           // Just created (for collision check)
+        Raindrop* parent;     // Parent drop (for trails)
     };
 
     // Simulation
@@ -83,7 +89,11 @@ private:
 
     // Raindrop collections
     std::vector<Raindrop> m_drops;         // Large moving drops
-    std::vector<Raindrop> m_staticDrops;   // Small static drops
+
+    // Droplets texture (background small drops)
+    std::vector<uint8_t> m_dropletsData;   // CPU-side droplets texture
+    uint32_t m_dropletsWidth = 0;
+    uint32_t m_dropletsHeight = 0;
 
     // Parameters
     float m_strength = 1.0f;
@@ -94,16 +104,19 @@ private:
     int m_noiseType = 0;
     float m_time = 0.0f;
 
-    // Rain-specific parameters
+    // Rain-specific parameters (Codrops compatible)
     float m_rainIntensity = 0.5f;      // 0-1: density of drops
     float m_dropSpeed = 1.0f;          // Fall speed multiplier
     float m_refractionStrength = 0.5f; // Refraction intensity
     float m_trailLength = 0.3f;        // Trail length (0-1)
-    float m_minDropSize = 5.0f;        // Minimum drop radius (pixels)
-    float m_maxDropSize = 20.0f;       // Maximum drop radius (pixels)
+    float m_minDropSize = 10.0f;       // Minimum drop radius (pixels)
+    float m_maxDropSize = 40.0f;       // Maximum drop radius (pixels)
+    float m_dropletsRate = 50.0f;      // Background droplets spawn rate
+    float m_collisionRadius = 0.65f;   // Collision detection radius
 
     // Simulation state
     float m_spawnTimer = 0.0f;
+    float m_dropletsCounter = 0.0f;
     std::mt19937 m_rng;
     uint32_t m_lastWidth = 0;
     uint32_t m_lastHeight = 0;

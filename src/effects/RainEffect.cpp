@@ -220,8 +220,8 @@ bool RainEffect::Apply(
     // Debug log (every ~60 frames to avoid spam)
     static int frameCount = 0;
     if (++frameCount % 60 == 0) {
-        LOG_INFO("RainEffect: drops=%zu, staticDrops=%zu, intensity=%.2f, dropTexture=%p",
-            m_drops.size(), m_staticDrops.size(), m_rainIntensity, m_dropTexture.Get());
+        LOG_INFO("RainEffect: drops=%zu, dropletsSize=%zu, intensity=%.2f, dropTexture=%p",
+            m_drops.size(), m_dropletsData.size(), m_rainIntensity, m_dropTexture.Get());
     }
     
     // Set viewport for all passes
@@ -291,157 +291,227 @@ void RainEffect::Update(float deltaTime) {
 }
 
 void RainEffect::UpdateDrops(float deltaTime) {
-    // Phase 2: Implement raindrop movement and lifecycle
+    // Codrops-compatible simulation
+    float timeScale = deltaTime * 60.0f; // Normalize to 60fps
+    if (timeScale > 1.1f) timeScale = 1.1f;
+    timeScale *= m_dropSpeed;
     
-    // Update spawn timer and spawn new drops
-    m_spawnTimer += deltaTime;
-    float spawnInterval = 0.1f / (m_rainIntensity + 0.01f); // More rain = more frequent spawns
-    
-    if (m_spawnTimer >= spawnInterval && m_lastWidth > 0 && m_lastHeight > 0) {
-        SpawnNewDrops(m_lastWidth, m_lastHeight);
-        m_spawnTimer = 0.0f;
-    }
-    
-    // Update existing drops
-    for (auto& drop : m_drops) {
-        if (drop.isFalling) {
-            // Apply gravity and update position
-            drop.velocity += deltaTime * m_dropSpeed * 0.5f;
-            drop.y += drop.velocity * deltaTime;
-            
-            // Update trail
-            drop.trailY = drop.y - m_trailLength * drop.velocity * 0.1f;
-            
-            // Lifetime for removal
-            drop.lifetime += deltaTime;
-            
-            // Random chance to stop falling and become static
-            std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-            if (dist(m_rng) < 0.01f * deltaTime || drop.y > 1.2f) {
-                drop.isFalling = false;
+    // Initialize droplets texture if needed
+    if (m_lastWidth > 0 && m_lastHeight > 0) {
+        if (m_dropletsData.empty() || m_dropletsWidth != m_lastWidth || m_dropletsHeight != m_lastHeight) {
+            m_dropletsWidth = m_lastWidth;
+            m_dropletsHeight = m_lastHeight;
+            m_dropletsData.resize(m_dropletsWidth * m_dropletsHeight * 4, 0);
+            // Initialize with neutral values (RG=128)
+            for (size_t i = 0; i < m_dropletsData.size(); i += 4) {
+                m_dropletsData[i + 0] = 128;
+                m_dropletsData[i + 1] = 128;
+                m_dropletsData[i + 2] = 0;
+                m_dropletsData[i + 3] = 0;
             }
-        } else {
-            // Static drops slowly fade/shrink
-            drop.lifetime += deltaTime;
-            drop.radius *= (1.0f - 0.1f * deltaTime);
         }
     }
     
-    // Remove drops that are too small or off-screen
-    m_drops.erase(
-        std::remove_if(m_drops.begin(), m_drops.end(), [](const Raindrop& d) {
-            return d.radius < 1.0f || d.y > 1.5f || d.lifetime > 10.0f;
-        }),
-        m_drops.end()
-    );
-    
-    // Merge nearby drops
-    MergeDrops();
-    
-    // Update static drops (small background drops)
-    for (auto& drop : m_staticDrops) {
-        drop.lifetime += deltaTime;
-        drop.radius *= (1.0f - 0.02f * deltaTime);
-    }
-    
-    // Remove faded static drops
-    m_staticDrops.erase(
-        std::remove_if(m_staticDrops.begin(), m_staticDrops.end(), [](const Raindrop& d) {
-            return d.radius < 0.5f;
-        }),
-        m_staticDrops.end()
-    );
-}
-
-void RainEffect::SpawnNewDrops(uint32_t width, uint32_t height) {
-    // Phase 2: Spawn new raindrops based on intensity
-    
-    std::uniform_real_distribution<float> posX(0.0f, 1.0f);
-    std::uniform_real_distribution<float> posY(-0.1f, 0.1f); // Start just above screen
-    std::uniform_real_distribution<float> sizeDist(m_minDropSize, m_maxDropSize);
-    std::uniform_real_distribution<float> velDist(0.5f, 2.0f);
-    std::uniform_real_distribution<float> seedDist(0.0f, 1.0f);
-    
-    // Spawn 1-3 large drops
-    int dropCount = static_cast<int>(1 + m_rainIntensity * 2);
-    for (int i = 0; i < dropCount && m_drops.size() < 100; ++i) {
-        Raindrop drop;
-        drop.x = posX(m_rng);
-        drop.y = posY(m_rng);
-        drop.radius = sizeDist(m_rng);
-        drop.velocity = velDist(m_rng);
-        drop.seed = seedDist(m_rng);
-        drop.isFalling = true;
-        drop.trailY = drop.y;
-        drop.lifetime = 0.0f;
-        m_drops.push_back(drop);
-    }
-    
-    // Spawn small static drops (background texture)
-    std::uniform_real_distribution<float> smallSize(1.0f, 3.0f);
-    int staticCount = static_cast<int>(5 * m_rainIntensity);
-    for (int i = 0; i < staticCount && m_staticDrops.size() < 500; ++i) {
-        Raindrop drop;
-        drop.x = posX(m_rng);
-        drop.y = posX(m_rng); // Anywhere on screen
-        drop.radius = smallSize(m_rng);
-        drop.velocity = 0.0f;
-        drop.seed = seedDist(m_rng);
-        drop.isFalling = false;
-        drop.trailY = drop.y;
-        drop.lifetime = 0.0f;
-        m_staticDrops.push_back(drop);
-    }
-}
-
-void RainEffect::MergeDrops() {
-    // Phase 2: Merge overlapping drops (gooey effect)
-    
-    for (size_t i = 0; i < m_drops.size(); ++i) {
-        for (size_t j = i + 1; j < m_drops.size(); ++j) {
-            Raindrop& a = m_drops[i];
-            Raindrop& b = m_drops[j];
-            
-            // Calculate distance (normalized coordinates)
-            float dx = a.x - b.x;
-            float dy = a.y - b.y;
-            float dist = std::sqrt(dx * dx + dy * dy);
-            
-            // Check if drops overlap (normalize radius to screen space)
-            float radiusSum = (a.radius + b.radius) / static_cast<float>(m_lastWidth) * 2.0f;
-            
-            if (dist < radiusSum) {
-                // Merge: larger drop absorbs smaller
-                if (a.radius > b.radius) {
-                    // Grow radius based on absorbed volume
-                    float volumeSum = a.radius * a.radius + b.radius * b.radius;
-                    a.radius = std::sqrt(volumeSum);
-                    a.velocity = (a.velocity * a.radius + b.velocity * b.radius) / (a.radius + b.radius);
-                    b.radius = 0; // Mark for removal
-                } else {
-                    float volumeSum = a.radius * a.radius + b.radius * b.radius;
-                    b.radius = std::sqrt(volumeSum);
-                    b.velocity = (a.velocity * a.radius + b.velocity * b.radius) / (a.radius + b.radius);
-                    a.radius = 0; // Mark for removal
+    // Spawn background droplets
+    m_dropletsCounter += m_dropletsRate * timeScale * m_rainIntensity;
+    std::uniform_real_distribution<float> pos01(0.0f, 1.0f);
+    std::uniform_real_distribution<float> smallSize(2.0f, 4.0f);
+    while (m_dropletsCounter >= 1.0f && m_dropletsWidth > 0) {
+        m_dropletsCounter -= 1.0f;
+        float x = pos01(m_rng);
+        float y = pos01(m_rng);
+        float r = smallSize(m_rng);
+        // Draw small droplet to droplets texture
+        int cx = static_cast<int>(x * m_dropletsWidth);
+        int cy = static_cast<int>(y * m_dropletsHeight);
+        int ir = static_cast<int>(r);
+        for (int dy = -ir; dy <= ir; ++dy) {
+            for (int dx = -ir; dx <= ir; ++dx) {
+                int px = cx + dx;
+                int py = cy + dy;
+                if (px >= 0 && px < (int)m_dropletsWidth && py >= 0 && py < (int)m_dropletsHeight) {
+                    float dist = std::sqrt((float)(dx*dx + dy*dy));
+                    if (dist <= r) {
+                        float alpha = (1.0f - dist/r) * 0.3f;
+                        size_t idx = (py * m_dropletsWidth + px) * 4;
+                        m_dropletsData[idx + 3] = (std::max)(m_dropletsData[idx + 3], (uint8_t)(alpha * 255));
+                    }
                 }
             }
         }
     }
     
-    // Remove merged drops
-    m_drops.erase(
-        std::remove_if(m_drops.begin(), m_drops.end(), [](const Raindrop& d) {
-            return d.radius <= 0;
-        }),
-        m_drops.end()
-    );
+    // Spawn rain drops (chance-based like Codrops)
+    std::uniform_real_distribution<float> chance01(0.0f, 1.0f);
+    float rainChance = 0.3f * m_rainIntensity;
+    int rainLimit = 3;
+    int rainCount = 0;
+    while (chance01(m_rng) < rainChance * timeScale && rainCount < rainLimit && m_drops.size() < 900) {
+        rainCount++;
+        SpawnNewDrops(m_lastWidth, m_lastHeight);
+    }
+    
+    // Update existing drops
+    std::vector<Raindrop> newDrops;
+    
+    for (auto& drop : m_drops) {
+        if (drop.killed) continue;
+        
+        float deltaR = m_maxDropSize - m_minDropSize;
+        
+        // Gravity - chance of drops "creeping down"
+        if (chance01(m_rng) < (drop.radius - m_minDropSize) * (0.1f / deltaR) * timeScale) {
+            std::uniform_real_distribution<float> momDist(0.0f, (drop.radius / m_maxDropSize) * 4.0f);
+            drop.momentum += momDist(m_rng);
+        }
+        
+        // Shrink
+        drop.radius -= drop.shrink * timeScale;
+        if (drop.radius <= 0) {
+            drop.killed = true;
+            continue;
+        }
+        
+        // Spawn trail drops
+        drop.lastSpawn += drop.momentum * timeScale * m_trailLength;
+        if (drop.lastSpawn > drop.nextSpawn && drop.momentum > 0.5f) {
+            std::uniform_real_distribution<float> trailR(0.2f, 0.5f);
+            Raindrop trail;
+            trail.x = drop.x + (chance01(m_rng) - 0.5f) * drop.radius * 0.002f;
+            trail.y = drop.y - drop.radius * 0.001f;
+            trail.radius = drop.radius * trailR(m_rng);
+            trail.momentum = 0.0f;
+            trail.momentumX = 0.0f;
+            trail.spreadX = 0.0f;
+            trail.spreadY = drop.momentum * 0.1f;
+            trail.seed = chance01(m_rng);
+            trail.shrink = 0.0f;
+            trail.lastSpawn = 0.0f;
+            trail.nextSpawn = 100.0f;
+            trail.killed = false;
+            trail.isNew = true;
+            trail.parent = &drop;
+            newDrops.push_back(trail);
+            
+            drop.radius *= std::pow(0.97f, timeScale);
+            drop.lastSpawn = 0.0f;
+            drop.nextSpawn = m_minDropSize + chance01(m_rng) * deltaR - drop.momentum * 2.0f;
+        }
+        
+        // Normalize spread
+        drop.spreadX *= std::pow(0.4f, timeScale);
+        drop.spreadY *= std::pow(0.7f, timeScale);
+        
+        // Update position
+        bool moved = drop.momentum > 0;
+        if (moved) {
+            drop.y += drop.momentum * m_dropSpeed * 0.01f;
+            drop.x += drop.momentumX * m_dropSpeed * 0.01f;
+            if (drop.y > 1.1f) {
+                drop.killed = true;
+                continue;
+            }
+        }
+        
+        // Collision detection
+        if ((moved || drop.isNew) && !drop.killed) {
+            for (auto& drop2 : m_drops) {
+                if (&drop == &drop2 || drop2.killed) continue;
+                if (drop.radius <= drop2.radius) continue;
+                if (drop.parent == &drop2 || drop2.parent == &drop) continue;
+                
+                float dx = drop2.x - drop.x;
+                float dy = drop2.y - drop.y;
+                float d = std::sqrt(dx*dx + dy*dy);
+                float threshold = (drop.radius + drop2.radius) * 0.001f * m_collisionRadius;
+                
+                if (d < threshold) {
+                    // Merge drops
+                    float a1 = 3.14159f * drop.radius * drop.radius;
+                    float a2 = 3.14159f * drop2.radius * drop2.radius;
+                    float targetR = std::sqrt((a1 + a2 * 0.8f) / 3.14159f);
+                    if (targetR > m_maxDropSize) targetR = m_maxDropSize;
+                    
+                    drop.radius = targetR;
+                    drop.momentumX += dx * 0.1f;
+                    drop.spreadX = 0;
+                    drop.spreadY = 0;
+                    drop2.killed = true;
+                    drop.momentum = (std::max)(drop2.momentum, (std::min)(40.0f, drop.momentum + targetR * 0.05f + 1.0f));
+                    
+                    // Clear droplets in path
+                    if (m_dropletsWidth > 0) {
+                        int cx = static_cast<int>(drop.x * m_dropletsWidth);
+                        int cy = static_cast<int>(drop.y * m_dropletsHeight);
+                        int clearR = static_cast<int>(drop.radius * 0.43f);
+                        for (int cdy = -clearR; cdy <= clearR; ++cdy) {
+                            for (int cdx = -clearR; cdx <= clearR; ++cdx) {
+                                int px = cx + cdx;
+                                int py = cy + cdy;
+                                if (px >= 0 && px < (int)m_dropletsWidth && py >= 0 && py < (int)m_dropletsHeight) {
+                                    size_t idx = (py * m_dropletsWidth + px) * 4;
+                                    m_dropletsData[idx + 3] = 0; // Clear alpha
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Slow down momentum
+        drop.momentum -= (std::max)(1.0f, m_minDropSize * 0.5f - drop.momentum) * 0.1f * timeScale;
+        if (drop.momentum < 0) drop.momentum = 0;
+        drop.momentumX *= std::pow(0.7f, timeScale);
+        
+        drop.isNew = false;
+        
+        if (!drop.killed) {
+            newDrops.push_back(drop);
+        }
+    }
+    
+    m_drops = newDrops;
+}
+
+void RainEffect::SpawnNewDrops(uint32_t width, uint32_t height) {
+    // Codrops-compatible spawning
+    std::uniform_real_distribution<float> posX(0.0f, 1.0f);
+    std::uniform_real_distribution<float> posY(-0.1f, 0.95f);
+    std::uniform_real_distribution<float> chance01(0.0f, 1.0f);
+    
+    // Pow distribution for radius (more small drops)
+    float t = chance01(m_rng);
+    float r = m_minDropSize + std::pow(t, 3.0f) * (m_maxDropSize - m_minDropSize);
+    
+    Raindrop drop;
+    drop.x = posX(m_rng);
+    drop.y = posY(m_rng);
+    drop.radius = r;
+    drop.momentum = 1.0f + ((r - m_minDropSize) * 0.1f) + chance01(m_rng) * 2.0f;
+    drop.momentumX = 0.0f;
+    drop.spreadX = 1.5f;
+    drop.spreadY = 1.5f;
+    drop.seed = chance01(m_rng);
+    drop.shrink = 0.0f;
+    drop.lastSpawn = 0.0f;
+    drop.nextSpawn = chance01(m_rng) * (m_maxDropSize - m_minDropSize);
+    drop.killed = false;
+    drop.isNew = true;
+    drop.parent = nullptr;
+    
+    m_drops.push_back(drop);
+}
+
+void RainEffect::MergeDrops() {
+    // Handled in UpdateDrops collision detection
 }
 
 void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width, uint32_t height) {
-    // Phase 3: Render drops to texture for refraction
-    // This function generates a texture where:
+    // Render drops to texture for refraction (Codrops compatible)
     // R = Y offset for refraction
     // G = X offset for refraction  
+    // B = depth/thickness
     // A = drop mask
     
     if (!m_dropRTV || !context || !m_raindropPS) return;
@@ -453,43 +523,61 @@ void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width,
     // Set drop texture as render target
     context->OMSetRenderTargets(1, m_dropRTV.GetAddressOf(), nullptr);
     
-    // Set up additive blending for overlapping drops
-    // For now, we use CPU-based drop texture generation
-    // (Full GPU instancing would be more efficient but complex)
-    
-    // Generate drop texture on CPU and upload
-    // Initialize with neutral refraction (RG=128=0.5, A=0)
+    // Generate drop texture on CPU
     std::vector<uint8_t> dropData(width * height * 4);
-    for (size_t i = 0; i < dropData.size(); i += 4) {
-        dropData[i + 0] = 128;  // R = 0.5 (no Y offset)
-        dropData[i + 1] = 128;  // G = 0.5 (no X offset)
-        dropData[i + 2] = 0;
-        dropData[i + 3] = 0;    // A = no drop
+    
+    // First, copy droplets background
+    if (!m_dropletsData.empty() && m_dropletsWidth == width && m_dropletsHeight == height) {
+        for (size_t i = 0; i < dropData.size(); i += 4) {
+            dropData[i + 0] = 128;  // R = 0.5
+            dropData[i + 1] = 128;  // G = 0.5
+            dropData[i + 2] = 0;
+            dropData[i + 3] = m_dropletsData[i + 3];  // Copy alpha from droplets
+        }
+    } else {
+        for (size_t i = 0; i < dropData.size(); i += 4) {
+            dropData[i + 0] = 128;
+            dropData[i + 1] = 128;
+            dropData[i + 2] = 0;
+            dropData[i + 3] = 0;
+        }
     }
     
-    // Render large drops
+    // Render drops with teardrop shape (scaleX=1, scaleY=1.5, spread)
     for (const auto& drop : m_drops) {
+        if (drop.killed) continue;
+        
         int centerX = static_cast<int>(drop.x * width);
         int centerY = static_cast<int>(drop.y * height);
-        int radius = static_cast<int>(drop.radius);
+        float radius = drop.radius;
         
-        for (int dy = -radius; dy <= radius; ++dy) {
-            for (int dx = -radius; dx <= radius; ++dx) {
+        // Codrops uses scaleX=1, scaleY=1.5 for teardrop shape
+        float scaleX = 1.0f * (drop.spreadX + 1.0f);
+        float scaleY = 1.5f * (drop.spreadY + 1.0f);
+        
+        int extentX = static_cast<int>(radius * scaleX);
+        int extentY = static_cast<int>(radius * scaleY);
+        
+        for (int dy = -extentY; dy <= extentY; ++dy) {
+            for (int dx = -extentX; dx <= extentX; ++dx) {
                 int px = centerX + dx;
                 int py = centerY + dy;
                 
                 if (px < 0 || px >= static_cast<int>(width) || 
                     py < 0 || py >= static_cast<int>(height)) continue;
                 
-                float dist = std::sqrt(static_cast<float>(dx * dx + dy * dy));
-                if (dist > radius) continue;
+                // Normalize to ellipse coordinates
+                float ex = dx / (radius * scaleX);
+                float ey = dy / (radius * scaleY);
+                float dist = std::sqrt(ex * ex + ey * ey);
                 
-                float normDist = dist / radius;
-                float height_val = std::sqrt(1.0f - normDist * normDist);
+                if (dist > 1.0f) continue;
                 
-                // Calculate normal
-                float nx = (radius > 0) ? dx / static_cast<float>(radius) : 0.0f;
-                float ny = (radius > 0) ? dy / static_cast<float>(radius) : 0.0f;
+                float height_val = std::sqrt(1.0f - dist * dist);
+                
+                // Calculate normal for refraction
+                float nx = ex;
+                float ny = ey;
                 float len = std::sqrt(nx * nx + ny * ny + height_val * height_val);
                 if (len > 0) {
                     nx /= len;
@@ -499,44 +587,16 @@ void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width,
                 // Map to 0-255 range
                 uint8_t r = static_cast<uint8_t>((ny * 0.5f + 0.5f) * 255);
                 uint8_t g = static_cast<uint8_t>((nx * 0.5f + 0.5f) * 255);
-                uint8_t b = static_cast<uint8_t>(height_val * 255);  // B = depth/thickness
-                uint8_t a = static_cast<uint8_t>(height_val * (1.0f - normDist * normDist * 0.5f) * 255);
+                uint8_t b = static_cast<uint8_t>(height_val * 255);
+                uint8_t a = static_cast<uint8_t>(height_val * (1.0f - dist * dist * 0.5f) * 255);
                 
                 size_t idx = (py * width + px) * 4;
-                // Direct write (no blend - latest drop wins)
                 if (a > dropData[idx + 3]) {
                     dropData[idx + 0] = r;
                     dropData[idx + 1] = g;
-                    dropData[idx + 2] = b;  // Depth for refraction scaling
+                    dropData[idx + 2] = b;
                     dropData[idx + 3] = a;
                 }
-            }
-        }
-    }
-    
-    // Render static drops (smaller, simpler)
-    for (const auto& drop : m_staticDrops) {
-        int centerX = static_cast<int>(drop.x * width);
-        int centerY = static_cast<int>(drop.y * height);
-        int radius = static_cast<int>(drop.radius);
-        
-        for (int dy = -radius; dy <= radius; ++dy) {
-            for (int dx = -radius; dx <= radius; ++dx) {
-                int px = centerX + dx;
-                int py = centerY + dy;
-                
-                if (px < 0 || px >= static_cast<int>(width) || 
-                    py < 0 || py >= static_cast<int>(height)) continue;
-                
-                float dist = std::sqrt(static_cast<float>(dx * dx + dy * dy));
-                if (dist > radius) continue;
-                
-                float normDist = dist / radius;
-                float alpha = (1.0f - normDist) * 0.3f; // Subtle static drops
-                
-                size_t idx = (py * width + px) * 4;
-                uint8_t a = static_cast<uint8_t>(alpha * 255);
-                dropData[idx + 3] = (std::max)(dropData[idx + 3], a);
             }
         }
     }
