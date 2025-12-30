@@ -59,18 +59,18 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
 }
 )";
 
-// Refraction/composite pixel shader
+// Refraction/composite pixel shader - Codrops compatible
 // Applies the drop texture to create the final refraction effect
 static const char* g_RefractionPS = R"(
 Texture2D backgroundBlurred : register(t0);  // Blurred background
 Texture2D backgroundFocus : register(t1);    // Sharp/focused background for drops
-Texture2D dropTexture : register(t2);         // Drop normals/mask (RG=offset, A=mask)
+Texture2D dropTexture : register(t2);         // Drop data (R=Y offset, G=X offset, B=depth, A=mask)
 SamplerState linearSampler : register(s0);
 
 cbuffer RefractionParams : register(b0) {
-    float refractionStrength;
+    float refractionStrength;  // 0-1, scaled to pixel range
     float blurAmount;
-    float2 padding;
+    float2 resolution;         // Screen resolution for pixel calculations
 };
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
@@ -85,25 +85,37 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
         return blurred;
     }
     
-    // Calculate refraction offset from drop texture
-    // RG channels contain normal-mapped refraction direction (0.5 = no offset)
-    float2 offset = (drop.rg - 0.5) * 2.0 * refractionStrength * 0.1;
+    // Codrops-style refraction calculation
+    float2 refraction = (drop.rg - 0.5) * 2.0;  // Normalized refraction direction
+    float depth = drop.b;                        // Drop depth/thickness
     
-    // Apply refraction to sample from focused background
-    float2 refractedUV = texcoord + offset;
+    // Calculate pixel size for proper scaling
+    float2 pixelSize = 1.0 / resolution;
+    
+    // Codrops uses minRefraction=256, maxRefraction=512
+    // We scale this by refractionStrength (default ~0.5)
+    float minRefraction = 128.0 * refractionStrength;
+    float refractionDelta = 256.0 * refractionStrength;
+    float refractionAmount = minRefraction + depth * refractionDelta;
+    
+    // Apply refraction
+    float2 refractedUV = texcoord + pixelSize * refraction * refractionAmount;
     
     // Clamp to valid UV range
     refractedUV = clamp(refractedUV, float2(0.001, 0.001), float2(0.999, 0.999));
     
-    // Sample focused background through refraction
+    // Sample focused background through refraction (the "lens" effect)
     float4 refracted = backgroundFocus.Sample(linearSampler, refractedUV);
     
-    // Add slight highlight at the "top" of the drop (where light would catch)
-    float highlight = saturate(drop.r - 0.5) * 2.0 * drop.a * 0.3;
+    // Codrops-style alpha processing: alphaMultiply=20, alphaSubtract=5
+    float alpha = saturate(drop.a * 20.0 - 5.0);
+    
+    // Add subtle highlight at top of drop
+    float highlight = saturate(drop.r - 0.5) * 2.0 * alpha * 0.15;
     refracted.rgb += float3(highlight, highlight, highlight);
     
-    // Blend refracted view with blurred background based on drop alpha
-    return lerp(blurred, refracted, drop.a);
+    // Blend refracted view with blurred background
+    return lerp(blurred, refracted, alpha);
 }
 )";
 
@@ -233,12 +245,13 @@ bool RainEffect::Apply(
         struct RefractionParams {
             float refractionStrength;
             float blurAmount;
-            float padding[2];
+            float resolutionX;
+            float resolutionY;
         } params;
         params.refractionStrength = m_refractionStrength;
         params.blurAmount = m_strength;
-        params.padding[0] = 0.0f;
-        params.padding[1] = 0.0f;
+        params.resolutionX = static_cast<float>(width);
+        params.resolutionY = static_cast<float>(height);
         memcpy(mappedResource.pData, &params, sizeof(params));
         context->Unmap(m_constantBuffer.Get(), 0);
     }
@@ -486,6 +499,7 @@ void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width,
                 // Map to 0-255 range
                 uint8_t r = static_cast<uint8_t>((ny * 0.5f + 0.5f) * 255);
                 uint8_t g = static_cast<uint8_t>((nx * 0.5f + 0.5f) * 255);
+                uint8_t b = static_cast<uint8_t>(height_val * 255);  // B = depth/thickness
                 uint8_t a = static_cast<uint8_t>(height_val * (1.0f - normDist * normDist * 0.5f) * 255);
                 
                 size_t idx = (py * width + px) * 4;
@@ -493,7 +507,7 @@ void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width,
                 if (a > dropData[idx + 3]) {
                     dropData[idx + 0] = r;
                     dropData[idx + 1] = g;
-                    dropData[idx + 2] = 0;
+                    dropData[idx + 2] = b;  // Depth for refraction scaling
                     dropData[idx + 3] = a;
                 }
             }
