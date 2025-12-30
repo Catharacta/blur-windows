@@ -191,14 +191,14 @@ bool RainEffect::Apply(
         return false;
     }
     
-    // Store dimensions for simulation
-    m_lastWidth = width;
-    m_lastHeight = height;
-    
-    // Create/update drop texture if needed
+    // Create/update drop texture if needed (before setting m_lastWidth/Height)
     if (!CreateDropTexture(width, height)) {
         return false;
     }
+    
+    // Store dimensions for simulation (after texture creation)
+    m_lastWidth = width;
+    m_lastHeight = height;
     
     // Set viewport for all passes
     D3D11_VIEWPORT viewport = {};
@@ -433,8 +433,14 @@ void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width,
     // (Full GPU instancing would be more efficient but complex)
     
     // Generate drop texture on CPU and upload
-    // This is a simplified approach - ideal would be GPU instanced rendering
-    std::vector<uint8_t> dropData(width * height * 4, 0);
+    // Initialize with neutral refraction (RG=128=0.5, A=0)
+    std::vector<uint8_t> dropData(width * height * 4);
+    for (size_t i = 0; i < dropData.size(); i += 4) {
+        dropData[i + 0] = 128;  // R = 0.5 (no Y offset)
+        dropData[i + 1] = 128;  // G = 0.5 (no X offset)
+        dropData[i + 2] = 0;
+        dropData[i + 3] = 0;    // A = no drop
+    }
     
     // Render large drops
     for (const auto& drop : m_drops) {
