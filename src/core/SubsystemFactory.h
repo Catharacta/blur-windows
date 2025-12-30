@@ -18,7 +18,8 @@ enum class EffectType {
     Gaussian,       // Separable Gaussian blur
     Kawase,         // Kawase/Dual blur
     Box,            // Simple box blur
-    Radial          // Radial / Zoom blur
+    Radial,         // Radial / Zoom blur
+    Rain            // Rain drops effect
 };
 
 /// Presenter types
@@ -34,6 +35,7 @@ std::unique_ptr<IBlurEffect> CreateGaussianBlur();
 std::unique_ptr<IBlurEffect> CreateKawaseBlur();
 std::unique_ptr<IBlurEffect> CreateBoxBlur();
 std::unique_ptr<IBlurEffect> CreateRadialBlur();
+std::unique_ptr<IBlurEffect> CreateRainEffect();
 std::unique_ptr<IPresenter> CreateDirectCompPresenter();
 std::unique_ptr<IPresenter> CreateULWPresenter();
 
@@ -61,6 +63,8 @@ public:
                 return CreateBoxBlur();
             case EffectType::Radial:
                 return CreateRadialBlur();
+            case EffectType::Rain:
+                return CreateRainEffect();
             default:
                 return nullptr;
         }
