@@ -61,6 +61,7 @@ set(EFFECTS_SOURCES
     src/effects/KawaseBlur.cpp
     src/effects/BoxBlur.cpp
     src/effects/RadialBlur.cpp
+    src/effects/RainEffect.cpp
 )
 
 # Source files - Presentation
