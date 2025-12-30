@@ -62,11 +62,13 @@ private:
 
     // GPU resources
     ComPtr<ID3D11PixelShader> m_refractionPS;
+    ComPtr<ID3D11PixelShader> m_raindropPS;
     ComPtr<ID3D11PixelShader> m_compositorPS;
     ComPtr<ID3D11Texture2D> m_dropTexture;
     ComPtr<ID3D11ShaderResourceView> m_dropSRV;
     ComPtr<ID3D11RenderTargetView> m_dropRTV;
     ComPtr<ID3D11Buffer> m_constantBuffer;
+    ComPtr<ID3D11Buffer> m_dropParamsBuffer;
     ComPtr<ID3D11SamplerState> m_sampler;
 
     // Intermediate textures
