@@ -11,6 +11,7 @@ OS標準の Acrylic や Mica よりも自由度の高いブラー、ティント
 ## 主な特徴
 
 - **多彩なブラーエフェクト**: Gaussian, Box, Kawase, Radial Blur をサポート。
+- **Rain Effect**: Codrops互換の水滴効果、屈折シミュレーション、Gooeyエフェクト対応。
 - **高速な処理**: Box Blur の分離型パス最適化などにより、低負荷で高品質なブラーを実現。
 - **ノイズオーバーレイ**: 6種類のノイズ（White, Sin, Grid, Perlin, Simplex, Voronoi）を合成可能。
 - **柔軟なティント**: 強度調整可能なカラーオーバーレイ。
