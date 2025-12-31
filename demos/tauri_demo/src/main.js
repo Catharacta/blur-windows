@@ -82,7 +82,7 @@ async function updateRainParams() {
 function toggleRainSection() {
   const effectType = parseInt(document.getElementById("select-effect").value);
   const rainSection = document.getElementById("rain-section");
-  rainSection.style.display = (effectType === 5) ? "block" : "none";
+  rainSection.style.display = (effectType === 4) ? "block" : "none";
 }
 
 window.addEventListener("DOMContentLoaded", () => {
