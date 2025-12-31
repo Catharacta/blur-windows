@@ -42,7 +42,7 @@ async function updateBlurParams() {
   const param = parseFloat(document.getElementById("slider-param").value);
   const colorHex = document.getElementById("color-tint").value;
   const alphaPercent = parseInt(document.getElementById("slider-alpha").value);
-  
+
   await invoke("update_blur_parameters", {
     effectType: effect,
     strength: strength,
@@ -65,6 +65,26 @@ async function updateNoiseParams() {
   });
 }
 
+async function updateRainParams() {
+  const intensity = parseInt(document.getElementById("slider-rain-int").value) / 100;
+  const dropSpeed = parseInt(document.getElementById("slider-rain-speed").value) / 10;
+  const refraction = parseInt(document.getElementById("slider-rain-refraction").value) / 100;
+  const trailLength = parseInt(document.getElementById("slider-rain-trail").value) / 100;
+
+  await invoke("update_rain_parameters", {
+    intensity,
+    dropSpeed,
+    refraction,
+    trailLength
+  });
+}
+
+function toggleRainSection() {
+  const effectType = parseInt(document.getElementById("select-effect").value);
+  const rainSection = document.getElementById("rain-section");
+  rainSection.style.display = (effectType === 5) ? "block" : "none";
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   statusText = document.getElementById("status-text");
   fpsCounter = document.getElementById("fps-counter");
@@ -80,6 +100,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const valSpan = document.getElementById(`val-${id.replace('slider-', '').replace('select-', '').replace('color-', '')}`);
       if (valSpan) valSpan.textContent = e.target.value;
       updateBlurParams();
+      if (id === "select-effect") toggleRainSection();
     });
   });
 
@@ -94,6 +115,22 @@ window.addEventListener("DOMContentLoaded", () => {
 
   document.querySelectorAll('input[name="noise-type"]').forEach(radio => {
     radio.addEventListener("change", updateNoiseParams);
+  });
+
+  // Rain effect controls
+  const rainInputs = ["slider-rain-int", "slider-rain-speed", "slider-rain-refraction", "slider-rain-trail"];
+  rainInputs.forEach(id => {
+    document.getElementById(id).addEventListener("input", (e) => {
+      const valSpan = document.getElementById(`val-${id.replace('slider-', '')}`);
+      if (valSpan) {
+        if (id === "slider-rain-speed") {
+          valSpan.textContent = (e.target.value / 10).toFixed(1);
+        } else {
+          valSpan.textContent = e.target.value;
+        }
+      }
+      updateRainParams();
+    });
   });
 
   setInterval(async () => {

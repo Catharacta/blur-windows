@@ -45,6 +45,13 @@ extern "C" {
     fn blur_set_noise_speed(window: *mut std::ffi::c_void, speed: f32) -> i32;
     fn blur_set_noise_type(window: *mut std::ffi::c_void, noise_type: i32) -> i32;
     fn blur_get_fps(window: *mut std::ffi::c_void) -> f32;
+
+    // Rain Effect API
+    fn blur_set_rain_intensity(window: *mut std::ffi::c_void, intensity: f32) -> i32;
+    fn blur_set_rain_drop_speed(window: *mut std::ffi::c_void, speed: f32) -> i32;
+    fn blur_set_rain_refraction(window: *mut std::ffi::c_void, strength: f32) -> i32;
+    fn blur_set_rain_trail_length(window: *mut std::ffi::c_void, length: f32) -> i32;
+    fn blur_set_rain_drop_size(window: *mut std::ffi::c_void, min_size: f32, max_size: f32) -> i32;
 }
 
 struct BlurState {
@@ -178,6 +185,38 @@ fn get_blur_fps(state: tauri::State<'_, BlurState>) -> f32 {
     }
 }
 
+#[tauri::command]
+fn update_rain_parameters(
+    state: tauri::State<'_, BlurState>,
+    intensity: Option<f32>,
+    drop_speed: Option<f32>,
+    refraction: Option<f32>,
+    trail_length: Option<f32>,
+    min_size: Option<f32>,
+    max_size: Option<f32>,
+) {
+    let window_lock = state.window.lock().unwrap();
+    if let Some(window) = *window_lock {
+        unsafe {
+            if let Some(i) = intensity {
+                blur_set_rain_intensity(window, i);
+            }
+            if let Some(s) = drop_speed {
+                blur_set_rain_drop_speed(window, s);
+            }
+            if let Some(r) = refraction {
+                blur_set_rain_refraction(window, r);
+            }
+            if let Some(t) = trail_length {
+                blur_set_rain_trail_length(window, t);
+            }
+            if let (Some(min), Some(max)) = (min_size, max_size) {
+                blur_set_rain_drop_size(window, min, max);
+            }
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -191,6 +230,7 @@ pub fn run() {
             stop_blur,
             update_blur_parameters,
             update_noise_parameters,
+            update_rain_parameters,
             get_blur_fps
         ])
         .run(tauri::generate_context!())
