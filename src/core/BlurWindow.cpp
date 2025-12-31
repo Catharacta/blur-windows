@@ -142,6 +142,10 @@ public:
         EffectType type = EffectType::Gaussian;
         if (jsonConfig.find("\"kawase\"") != std::string::npos) type = EffectType::Kawase;
         else if (jsonConfig.find("\"box\"") != std::string::npos) type = EffectType::Box;
+        else if (jsonConfig.find("\"radial\"") != std::string::npos) type = EffectType::Radial;
+        else if (jsonConfig.find("\"rain\"") != std::string::npos) type = EffectType::Rain;
+
+        LOG_INFO("SetEffectPipeline: detected type=%d from config", static_cast<int>(type));
 
         auto newEffect = SubsystemFactory::CreateEffect(type);
         if (newEffect && newEffect->Initialize(m_device)) {
@@ -155,8 +159,10 @@ public:
             newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
             m_effect = std::move(newEffect);
             m_graphicsInitialized = (m_capture && m_effect && m_presenter);
+            LOG_INFO("SetEffectPipeline: new effect initialized successfully");
             return true;
         }
+        LOG_ERROR("SetEffectPipeline: failed to create or initialize effect type=%d", static_cast<int>(type));
         return false;
     }
 

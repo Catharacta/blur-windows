@@ -1,110 +1,136 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BlurWindow Tauri Demo</title>
-    <link rel="stylesheet" href="/styles.css" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <div class="container">
-      <header>
-        <h1>BlurWindow Demo</h1>
-        <div id="status">
-          <span class="indicator"></span>
-          <span id="status-text">Disconnected</span>
-          <span id="fps-counter">0.0 FPS</span>
-        </div>
-      </header>
 
-      <main>
-        <div class="section">
-          <h3>Controls</h3>
-          <div class="button-group">
-            <button id="btn-start" class="btn-primary">Start Blur</button>
-            <button id="btn-stop" class="btn-secondary">Stop Blur</button>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BlurWindow Tauri Demo</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>BlurWindow Demo</h1>
+      <div id="status">
+        <span class="indicator"></span>
+        <span id="status-text">Disconnected</span>
+        <span id="fps-counter">0.0 FPS</span>
+      </div>
+    </header>
+
+    <main>
+      <div class="section">
+        <h3>Controls</h3>
+        <div class="button-group">
+          <button id="btn-start" class="btn-primary">Start Blur</button>
+          <button id="btn-stop" class="btn-secondary">Stop Blur</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Effect Settings</h3>
+        <div class="control-grid">
+          <div class="control-item">
+            <label>Effect Type</label>
+            <select id="select-effect">
+              <option value="0">Gaussian</option>
+              <option value="1">Kawase</option>
+              <option value="2">Box</option>
+              <option value="3">Radial</option>
+              <option value="4">Rain</option>
+            </select>
+          </div>
+
+          <div class="control-item">
+            <label>Strength: <span id="val-strength">100</span>%</label>
+            <input type="range" id="slider-strength" min="0" max="100" value="100">
+          </div>
+
+          <div class="control-item">
+            <label>Blur Param: <span id="val-param">5</span></label>
+            <input type="range" id="slider-param" min="1" max="50" value="5">
           </div>
         </div>
+      </div>
 
-        <div class="section">
-          <h3>Effect Settings</h3>
-          <div class="control-grid">
-            <div class="control-item">
-              <label>Effect Type</label>
-              <select id="select-effect">
-                <option value="0">Gaussian</option>
-                <option value="1">Kawase</option>
-                <option value="2">Box</option>
-                <option value="3">Radial</option>
-              </select>
-            </div>
-            
-            <div class="control-item">
-              <label>Strength: <span id="val-strength">100</span>%</label>
-              <input type="range" id="slider-strength" min="0" max="100" value="100">
-            </div>
-
-            <div class="control-item">
-              <label>Blur Param: <span id="val-param">5</span></label>
-              <input type="range" id="slider-param" min="1" max="50" value="5">
+      <div class="section">
+        <h3>Tint Color</h3>
+        <div class="control-grid">
+          <div class="control-item">
+            <label>Color</label>
+            <div class="color-picker-wrapper">
+              <input type="color" id="color-tint" value="#ffffff">
             </div>
           </div>
-        </div>
-
-        <div class="section">
-          <h3>Tint Color</h3>
-          <div class="control-grid">
-            <div class="control-item">
-              <label>Color</label>
-              <div class="color-picker-wrapper">
-                <input type="color" id="color-tint" value="#ffffff">
-              </div>
-            </div>
-            <div class="control-item">
-              <label>Alpha: <span id="val-alpha">0</span>%</label>
-              <input type="range" id="slider-alpha" min="0" max="100" value="0">
-            </div>
+          <div class="control-item">
+            <label>Alpha: <span id="val-alpha">0</span>%</label>
+            <input type="range" id="slider-alpha" min="0" max="100" value="0">
           </div>
         </div>
+      </div>
 
-        <div class="section">
-          <h3>Noise Settings</h3>
-          <div class="control-grid">
-            <div class="control-itemFull">
-              <label>Noise Type</label>
-              <div class="radio-group">
-                <label><input type="radio" name="noise-type" value="0" checked> White</label>
-                <label><input type="radio" name="noise-type" value="1"> Sin</label>
-                <label><input type="radio" name="noise-type" value="2"> Grid</label>
-                <label><input type="radio" name="noise-type" value="3"> Perlin</label>
-                <label><input type="radio" name="noise-type" value="4"> Simplex</label>
-                <label><input type="radio" name="noise-type" value="5"> Voronoi</label>
-              </div>
-            </div>
-            <div class="control-item">
-              <label>Intensity: <span id="val-noise-int">0</span>%</label>
-              <input type="range" id="slider-noise-int" min="0" max="100" value="0">
-            </div>
-            <div class="control-item">
-              <label>Scale: <span id="val-noise-scale">100</span></label>
-              <input type="range" id="slider-noise-scale" min="1" max="1000" value="100">
-            </div>
-            <div class="control-item">
-              <label>Speed: <span id="val-noise-speed">1.0</span></label>
-              <input type="range" id="slider-noise-speed" min="0" max="100" value="10">
+      <div class="section">
+        <h3>Noise Settings</h3>
+        <div class="control-grid">
+          <div class="control-itemFull">
+            <label>Noise Type</label>
+            <div class="radio-group">
+              <label><input type="radio" name="noise-type" value="0" checked> White</label>
+              <label><input type="radio" name="noise-type" value="1"> Sin</label>
+              <label><input type="radio" name="noise-type" value="2"> Grid</label>
+              <label><input type="radio" name="noise-type" value="3"> Perlin</label>
+              <label><input type="radio" name="noise-type" value="4"> Simplex</label>
+              <label><input type="radio" name="noise-type" value="5"> Voronoi</label>
             </div>
           </div>
+          <div class="control-item">
+            <label>Intensity: <span id="val-noise-int">0</span>%</label>
+            <input type="range" id="slider-noise-int" min="0" max="100" value="0">
+          </div>
+          <div class="control-item">
+            <label>Scale: <span id="val-noise-scale">100</span></label>
+            <input type="range" id="slider-noise-scale" min="1" max="1000" value="100">
+          </div>
+          <div class="control-item">
+            <label>Speed: <span id="val-noise-speed">1.0</span></label>
+            <input type="range" id="slider-noise-speed" min="0" max="100" value="10">
+          </div>
         </div>
+      </div>
 
-        <div class="section">
-          <h3>Logs</h3>
-          <div id="log-container"></div>
+      <div class="section" id="rain-section" style="display:none;">
+        <h3>Rain Effect</h3>
+        <div class="control-grid">
+          <div class="control-item">
+            <label>Intensity: <span id="val-rain-int">50</span>%</label>
+            <input type="range" id="slider-rain-int" min="0" max="100" value="50">
+          </div>
+          <div class="control-item">
+            <label>Drop Speed: <span id="val-rain-speed">1.0</span></label>
+            <input type="range" id="slider-rain-speed" min="1" max="50" value="10">
+          </div>
+          <div class="control-item">
+            <label>Refraction: <span id="val-rain-refraction">50</span>%</label>
+            <input type="range" id="slider-rain-refraction" min="0" max="100" value="50">
+          </div>
+          <div class="control-item">
+            <label>Trail Length: <span id="val-rain-trail">30</span>%</label>
+            <input type="range" id="slider-rain-trail" min="0" max="100" value="30">
+          </div>
         </div>
-      </main>
-    </div>
-    <script type="module" src="/main.js"></script>
-  </body>
+      </div>
+
+      <div class="section">
+        <h3>Logs</h3>
+        <div id="log-container"></div>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="/main.js"></script>
+</body>
+
 </html>
