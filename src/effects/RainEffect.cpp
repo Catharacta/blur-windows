@@ -420,14 +420,14 @@ void RainEffect::UpdateDrops(float deltaTime) {
             std::uniform_real_distribution<float> trailR(0.2f, 0.5f);
             Raindrop trail;
             trail.x = drop.x + (chance01(m_rng) - 0.5f) * drop.radius * 0.002f;
-            trail.y = drop.y - drop.radius * 0.001f;
+            trail.y = drop.y - drop.radius * 0.005f;  // Increased gap behind parent
             trail.radius = drop.radius * trailR(m_rng);
             trail.momentum = 0.0f;
             trail.momentumX = 0.0f;
             trail.spreadX = 0.0f;
-            trail.spreadY = drop.momentum * 0.1f;
+            trail.spreadY = drop.momentum * 0.3f;  // More vertical stretch
             trail.seed = chance01(m_rng);
-            trail.shrink = 0.0f;
+            trail.shrink = 0.02f;  // Trail fades over time
             trail.lastSpawn = 0.0f;
             trail.nextSpawn = 100.0f;
             trail.killed = false;
@@ -597,8 +597,9 @@ void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width,
         float radius = drop.radius;
         
         // Codrops uses scaleX=1, scaleY=1.5 for teardrop shape
+        // Trails have stronger vertical stretch via spreadY
         float scaleX = 1.0f * (drop.spreadX + 1.0f);
-        float scaleY = 1.5f * (drop.spreadY + 1.0f);
+        float scaleY = 1.5f * (1.0f + drop.spreadY * 2.0f);  // Up to 3x stretch for trails
         
         int extentX = static_cast<int>(radius * scaleX);
         int extentY = static_cast<int>(radius * scaleY);
