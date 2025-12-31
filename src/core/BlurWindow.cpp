@@ -184,10 +184,15 @@ public:
     }
 
     void SetEffectType(int type) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        SetEffectTypeInternal(type);
+    }
+    
+    // Internal version without lock (must be called with m_graphicsMutex held)
+    void SetEffectTypeInternal(int type) {
         EffectType effectType = static_cast<EffectType>(type);
         auto newEffect = SubsystemFactory::CreateEffect(effectType);
         if (newEffect && newEffect->Initialize(m_device)) {
-            std::lock_guard<std::mutex> lock(m_graphicsMutex);
             newEffect->SetStrength(m_currentStrength);
             newEffect->SetNoiseIntensity(m_noiseIntensity);
             newEffect->SetNoiseScale(m_noiseScale);
@@ -196,6 +201,16 @@ public:
             newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
             m_effect = std::move(newEffect);
         }
+    }
+    
+    // Helper: Ensure RainEffect is active (must be called with m_graphicsMutex held)
+    RainEffect* EnsureRainEffect() {
+        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        if (!rain) {
+            SetEffectTypeInternal(static_cast<int>(EffectType::Rain));
+            rain = dynamic_cast<RainEffect*>(m_effect.get());
+        }
+        return rain;
     }
 
     void SetBlurParam(float param) {
@@ -238,31 +253,32 @@ public:
 
     void SetRainIntensity(float intensity) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        // Auto-enable RainEffect if intensity > 0
+        RainEffect* rain = (intensity > 0) ? EnsureRainEffect() : dynamic_cast<RainEffect*>(m_effect.get());
         if (rain) rain->SetRainIntensity(intensity);
     }
 
     void SetRainDropSpeed(float speed) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        RainEffect* rain = EnsureRainEffect();
         if (rain) rain->SetDropSpeed(speed);
     }
 
     void SetRainRefraction(float strength) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        RainEffect* rain = EnsureRainEffect();
         if (rain) rain->SetRefractionStrength(strength);
     }
 
     void SetRainTrailLength(float length) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        RainEffect* rain = EnsureRainEffect();
         if (rain) rain->SetTrailLength(length);
     }
 
     void SetRainDropSize(float minSize, float maxSize) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
+        RainEffect* rain = EnsureRainEffect();
         if (rain) rain->SetDropSizeRange(minSize, maxSize);
     }
 
