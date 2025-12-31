@@ -73,6 +73,35 @@ extern "C" {
     pub fn blur_set_bounds(window: BlurWindowHandle, bounds: *const BlurRect) -> BlurErrorCode;
     pub fn blur_get_fps(window: BlurWindowHandle) -> f32;
     pub fn blur_get_last_error() -> *const c_char;
+
+    // Effect control
+    pub fn blur_set_effect_type(window: BlurWindowHandle, effect_type: i32) -> BlurErrorCode;
+    pub fn blur_set_strength(window: BlurWindowHandle, strength: f32) -> BlurErrorCode;
+    pub fn blur_set_blur_param(window: BlurWindowHandle, param: f32) -> BlurErrorCode;
+    pub fn blur_set_tint_color(
+        window: BlurWindowHandle,
+        r: f32,
+        g: f32,
+        b: f32,
+        a: f32,
+    ) -> BlurErrorCode;
+
+    // Noise control
+    pub fn blur_set_noise_intensity(window: BlurWindowHandle, intensity: f32) -> BlurErrorCode;
+    pub fn blur_set_noise_scale(window: BlurWindowHandle, scale: f32) -> BlurErrorCode;
+    pub fn blur_set_noise_speed(window: BlurWindowHandle, speed: f32) -> BlurErrorCode;
+    pub fn blur_set_noise_type(window: BlurWindowHandle, noise_type: i32) -> BlurErrorCode;
+
+    // Rain Effect control
+    pub fn blur_set_rain_intensity(window: BlurWindowHandle, intensity: f32) -> BlurErrorCode;
+    pub fn blur_set_rain_drop_speed(window: BlurWindowHandle, speed: f32) -> BlurErrorCode;
+    pub fn blur_set_rain_refraction(window: BlurWindowHandle, strength: f32) -> BlurErrorCode;
+    pub fn blur_set_rain_trail_length(window: BlurWindowHandle, length: f32) -> BlurErrorCode;
+    pub fn blur_set_rain_drop_size(
+        window: BlurWindowHandle,
+        min_size: f32,
+        max_size: f32,
+    ) -> BlurErrorCode;
 }
 
 // Safe wrapper implementation would go here...
