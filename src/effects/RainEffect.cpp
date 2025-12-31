@@ -93,15 +93,39 @@ float4 blurBackground(float2 uv) {
     return color / total;
 }
 
+// Gooey effect: blur the drop texture to make drops blend together
+float4 sampleDropWithGooey(float2 uv) {
+    float2 pixelSize = 1.0 / resolution;
+    float gooeyRadius = 3.0; // Pixel radius for gooey blur
+    
+    float4 color = float4(0, 0, 0, 0);
+    float total = 0.0;
+    
+    // 5x5 blur for gooey effect
+    for (int i = -2; i <= 2; ++i) {
+        for (int j = -2; j <= 2; ++j) {
+            float2 offset = float2(i, j) * pixelSize * gooeyRadius;
+            float weight = 1.0 / (1.0 + abs(i) + abs(j));
+            color += dropTexture.Sample(linearSampler, uv + offset) * weight;
+            total += weight;
+        }
+    }
+    return color / total;
+}
+
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
-    // Sample drop texture
-    float4 drop = dropTexture.Sample(linearSampler, texcoord);
+    // Sample drop texture with gooey blur effect
+    float4 drop = sampleDropWithGooey(texcoord);
     
     // Get blurred background (looking through frosted glass effect)
     float4 blurred = blurBackground(texcoord);
     
-    // If no drop at this pixel, return blurred background
-    if (drop.a < 0.01) {
+    // Codrops-style alpha processing: alphaMultiply=20, alphaSubtract=5
+    // This creates the gooey threshold effect where nearby drops blend
+    float alpha = saturate(drop.a * 20.0 - 5.0);
+    
+    // If no drop at this pixel after gooey processing, return blurred background
+    if (alpha < 0.01) {
         return blurred;
     }
     
@@ -128,11 +152,8 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     // Water drops show refracted view of the already-blurred background
     float4 refracted = blurBackground(refractedUV);
     
-    // Codrops-style alpha processing: alphaMultiply=20, alphaSubtract=5
-    float alpha = saturate(drop.a * 20.0 - 5.0);
-    
-    // Add subtle highlight at top of drop
-    float highlight = saturate(drop.r - 0.5) * 2.0 * alpha * 0.15;
+    // Add subtle highlight at top of drop (where light would reflect)
+    float highlight = saturate(drop.r - 0.5) * 2.0 * alpha * 0.2;
     refracted.rgb += float3(highlight, highlight, highlight);
     
     // Blend refracted view with blurred background
