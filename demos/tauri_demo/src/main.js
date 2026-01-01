@@ -12,10 +12,11 @@ function appendLog(msg) {
 
 async function startBlur() {
   try {
-    await invoke("start_blur", { windowHandle: 0 }); // handle will be handled on rust side
+    const effectType = parseInt(document.getElementById("select-effect").value);
+    await invoke("start_blur", { effectType });
     document.body.classList.add("running");
     statusText.textContent = "Running";
-    appendLog("Blur started.");
+    appendLog(`Blur started (Effect: ${effectType}).`);
   } catch (e) {
     appendLog(`Error: ${e}`);
   }

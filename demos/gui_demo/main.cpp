@@ -258,8 +258,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     g_blurWindow->Start();
                     
                     if (g_blurWindow->IsInitialized()) {
+                        // Apply currently selected effect type
+                        int effectType = (int)SendMessage(g_hComboEffect, CB_GETCURSEL, 0, 0);
+                        g_blurWindow->SetEffectType(effectType);
+                        
                         ShowWindow(g_blurWindow->GetHWND(), SW_SHOW);
-                        AppendLog(L"BlurWindow started (Gaussian effect).");
+                        
+                        const wchar_t* effectNames[] = { L"Gaussian", L"Kawase", L"Box", L"Radial", L"Rain" };
+                        std::wstring msg = L"BlurWindow started (";
+                        msg += effectNames[effectType];
+                        msg += L" effect).";
+                        AppendLog(msg.c_str());
                         UpdateStatus(L"Running");
                     } else {
                         AppendLog(L"Error: Graphics initialization failed in Start().");

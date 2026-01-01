@@ -125,6 +125,10 @@ BLURWINDOW_API BlurErrorCode blur_set_noise_type(BlurWindowHandle window, int32_
 
 ## Rain Effect Control
 
+> [!IMPORTANT]
+> Rainエフェクトを使用する場合、`blur_start`後に`blur_set_effect_type(window, 4)`を呼び出すか、
+> `blur_set_rain_intensity`などのRain API関数を呼び出してください（自動的にRainエフェクトに切り替わります）。
+
 ### `blur_set_rain_intensity`
 ```c
 BLURWINDOW_API BlurErrorCode blur_set_rain_intensity(BlurWindowHandle window, float intensity);
