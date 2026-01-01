@@ -354,8 +354,13 @@ void RainEffect::UpdateDrops(float deltaTime) {
         }
     }
     
-    // Spawn background droplets
-    m_dropletsCounter += m_dropletsRate * timeScale * m_rainIntensity;
+    // Screen area scaling: More drops for larger screens
+    const float referenceArea = 1920.0f * 1080.0f;
+    float currentArea = static_cast<float>(m_lastWidth) * static_cast<float>(m_lastHeight);
+    float areaScale = (std::max)(1.0f, currentArea / referenceArea);
+
+    // Spawn background droplets (scaled by screen area)
+    m_dropletsCounter += m_dropletsRate * timeScale * m_rainIntensity * areaScale;
     std::uniform_real_distribution<float> pos01(0.0f, 1.0f);
     std::uniform_real_distribution<float> smallSize(2.0f, 4.0f);
     while (m_dropletsCounter >= 1.0f && m_dropletsWidth > 0) {
@@ -383,12 +388,13 @@ void RainEffect::UpdateDrops(float deltaTime) {
         }
     }
     
-    // Spawn rain drops (chance-based like Codrops)
+    // Spawn rain drops (chance-based like Codrops, scaled by screen area)
     std::uniform_real_distribution<float> chance01(0.0f, 1.0f);
-    float rainChance = 0.3f * m_rainIntensity;
-    int rainLimit = 3;
+    float rainChance = 0.3f * m_rainIntensity * areaScale;  // スケール適用
+    int rainLimit = static_cast<int>(3 * areaScale);        // 1フレームあたりの生成限度
+    size_t maxDrops = static_cast<size_t>(900 * areaScale); // 最大雨滴数
     int rainCount = 0;
-    while (chance01(m_rng) < rainChance * timeScale && rainCount < rainLimit && m_drops.size() < 900) {
+    while (chance01(m_rng) < rainChance * timeScale && rainCount < rainLimit && m_drops.size() < maxDrops) {
         rainCount++;
         SpawnNewDrops(m_lastWidth, m_lastHeight);
     }

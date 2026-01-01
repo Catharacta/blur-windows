@@ -10,9 +10,12 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "tauri_demo",
-        "width": 800,
-        "height": 600
+        "title": "BlurWindow Demo",
+        "width": 450,
+        "height": 800,
+        "resizable": true,
+        "minWidth": 400,
+        "minHeight": 600
       }
     ],
     "security": {

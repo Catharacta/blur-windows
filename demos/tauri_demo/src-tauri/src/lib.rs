@@ -45,6 +45,7 @@ extern "C" {
     fn blur_set_noise_speed(window: *mut std::ffi::c_void, speed: f32) -> i32;
     fn blur_set_noise_type(window: *mut std::ffi::c_void, noise_type: i32) -> i32;
     fn blur_get_fps(window: *mut std::ffi::c_void) -> f32;
+    fn blur_set_bounds(window: *mut std::ffi::c_void, bounds: *const BlurRect) -> i32;
 
     // Rain Effect API
     fn blur_set_rain_intensity(window: *mut std::ffi::c_void, intensity: f32) -> i32;
@@ -89,10 +90,10 @@ fn start_blur(state: tauri::State<'_, BlurState>, effect_type: Option<i32>) -> R
         let opts = BlurWindowOptionsC {
             owner: std::ptr::null_mut(),
             bounds: BlurRect {
-                left: 100,
-                top: 100,
-                right: 600,
-                bottom: 500,
+                left: 500, // デモUI右側に配置
+                top: 50,
+                right: 1400, // 900pxの幅
+                bottom: 650, // 600pxの高さ
             },
             top_most: 1,
             click_through: 0,
@@ -223,6 +224,31 @@ fn update_rain_parameters(
     }
 }
 
+#[tauri::command]
+fn set_blur_bounds(
+    state: tauri::State<'_, BlurState>,
+    left: i32,
+    top: i32,
+    width: i32,
+    height: i32,
+) -> Result<(), String> {
+    let window_lock = state.window.lock().unwrap();
+    if let Some(window) = *window_lock {
+        let bounds = BlurRect {
+            left,
+            top,
+            right: left + width,
+            bottom: top + height,
+        };
+        unsafe {
+            if blur_set_bounds(window, &bounds) != 0 {
+                return Err("Failed to set bounds".into());
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -237,7 +263,8 @@ pub fn run() {
             update_blur_parameters,
             update_noise_parameters,
             update_rain_parameters,
-            get_blur_fps
+            get_blur_fps,
+            set_blur_bounds
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

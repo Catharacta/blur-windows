@@ -134,6 +134,29 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // Blur Window Bounds controls
+  async function updateBlurBounds() {
+    const left = parseInt(document.getElementById("slider-pos-x").value);
+    const top = parseInt(document.getElementById("slider-pos-y").value);
+    const width = parseInt(document.getElementById("slider-size-w").value);
+    const height = parseInt(document.getElementById("slider-size-h").value);
+
+    try {
+      await invoke("set_blur_bounds", { left, top, width, height });
+    } catch (e) {
+      appendLog(`Bounds error: ${e}`);
+    }
+  }
+
+  const boundsInputs = ["slider-pos-x", "slider-pos-y", "slider-size-w", "slider-size-h"];
+  boundsInputs.forEach(id => {
+    document.getElementById(id).addEventListener("input", (e) => {
+      const valSpan = document.getElementById(`val-${id.replace('slider-', '')}`);
+      if (valSpan) valSpan.textContent = e.target.value;
+      updateBlurBounds();
+    });
+  });
+
   setInterval(async () => {
     if (document.body.classList.contains("running")) {
       const fps = await invoke("get_blur_fps");
