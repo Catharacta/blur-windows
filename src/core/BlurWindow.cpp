@@ -191,24 +191,41 @@ public:
     // Internal version without lock (must be called with m_graphicsMutex held)
     void SetEffectTypeInternal(int type) {
         EffectType effectType = static_cast<EffectType>(type);
+        LOG_DEBUG("SetEffectTypeInternal: switching to type {}", type);
+        
         auto newEffect = SubsystemFactory::CreateEffect(effectType);
-        if (newEffect && newEffect->Initialize(m_device)) {
-            newEffect->SetStrength(m_currentStrength);
-            newEffect->SetNoiseIntensity(m_noiseIntensity);
-            newEffect->SetNoiseScale(m_noiseScale);
-            newEffect->SetNoiseSpeed(m_noiseSpeed);
-            newEffect->SetNoiseType(m_noiseType);
-            newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
-            m_effect = std::move(newEffect);
+        if (!newEffect) {
+            LOG_ERROR("SetEffectTypeInternal: CreateEffect failed for type {}", type);
+            return;
         }
+        
+        if (!newEffect->Initialize(m_device)) {
+            LOG_ERROR("SetEffectTypeInternal: Initialize failed, m_device={}", (void*)m_device);
+            return;
+        }
+        
+        newEffect->SetStrength(m_currentStrength);
+        newEffect->SetNoiseIntensity(m_noiseIntensity);
+        newEffect->SetNoiseScale(m_noiseScale);
+        newEffect->SetNoiseSpeed(m_noiseSpeed);
+        newEffect->SetNoiseType(m_noiseType);
+        newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
+        m_effect = std::move(newEffect);
+        LOG_INFO("SetEffectTypeInternal: Successfully switched to type {}", type);
     }
     
     // Helper: Ensure RainEffect is active (must be called with m_graphicsMutex held)
     RainEffect* EnsureRainEffect() {
         auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
         if (!rain) {
+            LOG_INFO("EnsureRainEffect: Current effect is not RainEffect, switching...");
             SetEffectTypeInternal(static_cast<int>(EffectType::Rain));
             rain = dynamic_cast<RainEffect*>(m_effect.get());
+            if (!rain) {
+                LOG_ERROR("EnsureRainEffect: Failed to switch to RainEffect");
+            } else {
+                LOG_INFO("EnsureRainEffect: Successfully switched to RainEffect");
+            }
         }
         return rain;
     }
