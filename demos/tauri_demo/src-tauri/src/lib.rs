@@ -63,7 +63,7 @@ unsafe impl Send for BlurState {}
 unsafe impl Sync for BlurState {}
 
 #[tauri::command]
-fn start_blur(state: tauri::State<'_, BlurState>, _window_handle: usize) -> Result<(), String> {
+fn start_blur(state: tauri::State<'_, BlurState>, effect_type: Option<i32>) -> Result<(), String> {
     let mut sys_lock = state.sys.lock().unwrap();
     let mut window_lock = state.window.lock().unwrap();
 
@@ -102,6 +102,12 @@ fn start_blur(state: tauri::State<'_, BlurState>, _window_handle: usize) -> Resu
         let window = blur_create_window(sys, std::ptr::null_mut(), &opts);
         if !window.is_null() {
             blur_start(window);
+
+            // Apply effect type if specified (default: 0 = Gaussian)
+            if let Some(t) = effect_type {
+                blur_set_effect_type(window, t);
+            }
+
             *window_lock = Some(window);
             Ok(())
         } else {
