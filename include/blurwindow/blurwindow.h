@@ -48,6 +48,7 @@ struct WindowOptions {
     RECT bounds = {0, 0, 0, 0}; ///< Window bounds (screen coordinates)
     bool topMost = true;        ///< Always on top
     bool clickThrough = true;   ///< Click-through window
+    int initialEffectType = 0;  ///< Initial effect type
 };
 
 /// System initialization options

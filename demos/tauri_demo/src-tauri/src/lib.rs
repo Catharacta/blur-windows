@@ -22,6 +22,7 @@ struct BlurWindowOptionsC {
     bounds: BlurRect,
     top_most: i32,
     click_through: i32,
+    effect_type: i32,
 }
 
 extern "C" {
@@ -64,13 +65,27 @@ unsafe impl Send for BlurState {}
 unsafe impl Sync for BlurState {}
 
 #[tauri::command]
-fn start_blur(state: tauri::State<'_, BlurState>, effect_type: Option<i32>) -> Result<(), String> {
+fn start_blur(
+    window: tauri::Window,
+    state: tauri::State<'_, BlurState>,
+    effect_type: Option<i32>,
+    left: Option<i32>,
+    top: Option<i32>,
+    width: Option<i32>,
+    height: Option<i32>,
+) -> Result<(), String> {
     let mut sys_lock = state.sys.lock().unwrap();
     let mut window_lock = state.window.lock().unwrap();
 
     if window_lock.is_some() {
         return Ok(());
     }
+
+    // Default bounds (Safety fallback)
+    let left = left.unwrap_or(500);
+    let top = top.unwrap_or(50);
+    let width = width.unwrap_or(900);
+    let height = height.unwrap_or(600);
 
     unsafe {
         if sys_lock.is_none() {
@@ -87,32 +102,32 @@ fn start_blur(state: tauri::State<'_, BlurState>, effect_type: Option<i32>) -> R
         }
 
         let sys = sys_lock.unwrap();
+
+        // Get raw HWND for owner
+        use tauri::Manager;
+        let hwnd = window.hwnd().map(|h| h.0).unwrap_or(std::ptr::null_mut());
+
         let opts = BlurWindowOptionsC {
-            owner: std::ptr::null_mut(),
+            owner: hwnd,
             bounds: BlurRect {
-                left: 500, // デモUI右側に配置
-                top: 50,
-                right: 1400, // 900pxの幅
-                bottom: 650, // 600pxの高さ
+                left,
+                top,
+                right: left + width,
+                bottom: top + height,
             },
-            top_most: 1,
-            click_through: 0,
+            top_most: 0,
+            click_through: 1,
+            effect_type: effect_type.unwrap_or(0),
         };
 
-        // Passing null as owner for standalone window
-        let window = blur_create_window(sys, std::ptr::null_mut(), &opts);
-        if !window.is_null() {
-            blur_start(window);
+        let b_window = blur_create_window(sys, hwnd, &opts);
+        if !b_window.is_null() {
+            blur_start(b_window);
 
-            // Apply effect type if specified (default: 0 = Gaussian)
-            if let Some(t) = effect_type {
-                blur_set_effect_type(window, t);
-            }
-
-            *window_lock = Some(window);
+            *window_lock = Some(b_window);
             Ok(())
         } else {
-            Err("Failed to create blur window".into())
+            Err("Failed to create blur window.".into())
         }
     }
 }

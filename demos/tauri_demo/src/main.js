@@ -12,11 +12,32 @@ function appendLog(msg) {
 
 async function startBlur() {
   try {
-    const effectType = parseInt(document.getElementById("select-effect").value);
-    await invoke("start_blur", { effectType });
+    const effectType = parseInt(document.getElementById("select-effect")?.value || "0");
+    const left = parseInt(document.getElementById("slider-pos-x")?.value || "500");
+    const top = parseInt(document.getElementById("slider-pos-y")?.value || "50");
+    const width = parseInt(document.getElementById("slider-size-w")?.value || "900");
+    const height = parseInt(document.getElementById("slider-size-h")?.value || "600");
+
+    await invoke("start_blur", {
+      effectType,
+      left,
+      top,
+      width,
+      height
+    });
+
     document.body.classList.add("running");
     statusText.textContent = "Running";
-    appendLog(`Blur started (Effect: ${effectType}).`);
+
+    // Wait for native window stabilization
+    await new Promise(r => setTimeout(r, 100));
+
+    // Sync other parameters
+    await updateBlurParams();
+    await updateNoiseParams();
+    await updateRainParams();
+
+    appendLog(`Blur started at (${left}, ${top}). Params synced.`);
   } catch (e) {
     appendLog(`Error: ${e}`);
   }
@@ -134,28 +155,7 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Blur Window Bounds controls
-  async function updateBlurBounds() {
-    const left = parseInt(document.getElementById("slider-pos-x").value);
-    const top = parseInt(document.getElementById("slider-pos-y").value);
-    const width = parseInt(document.getElementById("slider-size-w").value);
-    const height = parseInt(document.getElementById("slider-size-h").value);
 
-    try {
-      await invoke("set_blur_bounds", { left, top, width, height });
-    } catch (e) {
-      appendLog(`Bounds error: ${e}`);
-    }
-  }
-
-  const boundsInputs = ["slider-pos-x", "slider-pos-y", "slider-size-w", "slider-size-h"];
-  boundsInputs.forEach(id => {
-    document.getElementById(id).addEventListener("input", (e) => {
-      const valSpan = document.getElementById(`val-${id.replace('slider-', '')}`);
-      if (valSpan) valSpan.textContent = e.target.value;
-      updateBlurBounds();
-    });
-  });
 
   setInterval(async () => {
     if (document.body.classList.contains("running")) {

@@ -47,6 +47,7 @@ BLURWINDOW_API BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* o
     options.bounds.bottom = opts->bounds.bottom;
     options.topMost = (opts->topMost != 0);
     options.clickThrough = (opts->clickThrough != 0);
+    options.initialEffectType = opts->effectType;
 
     auto window = BlurSystem::Instance().CreateBlurWindow(options.owner, options);
     if (!window) {

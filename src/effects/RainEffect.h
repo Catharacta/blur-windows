@@ -59,6 +59,12 @@ private:
         Raindrop* parent;     // Parent drop (for trails)
     };
 
+    struct DropInstance {
+        float x, y;
+        float radius;
+        float seed;
+    };
+
     // Simulation
     void UpdateDrops(float deltaTime);
     void SpawnNewDrops(uint32_t width, uint32_t height);
@@ -67,14 +73,17 @@ private:
     bool CreateDropTexture(uint32_t width, uint32_t height);
 
     // GPU resources
+    ComPtr<ID3D11VertexShader> m_raindropVS;
     ComPtr<ID3D11PixelShader> m_refractionPS;
     ComPtr<ID3D11PixelShader> m_raindropPS;
-    ComPtr<ID3D11PixelShader> m_compositorPS;
+    ComPtr<ID3D11PixelShader> m_boxBlurPS;
     ComPtr<ID3D11Texture2D> m_dropTexture;
     ComPtr<ID3D11ShaderResourceView> m_dropSRV;
     ComPtr<ID3D11RenderTargetView> m_dropRTV;
     ComPtr<ID3D11Buffer> m_constantBuffer;
-    ComPtr<ID3D11Buffer> m_dropParamsBuffer;
+    ComPtr<ID3D11Buffer> m_blurParamsBuffer;
+    ComPtr<ID3D11Buffer> m_instanceBuffer;
+    ComPtr<ID3D11ShaderResourceView> m_instanceSRV;
     ComPtr<ID3D11SamplerState> m_sampler;
 
     // Intermediate textures
@@ -108,9 +117,10 @@ private:
     float m_rainIntensity = 0.5f;      // 0-1: density of drops
     float m_dropSpeed = 1.0f;          // Fall speed multiplier
     float m_refractionStrength = 0.5f; // Refraction intensity
+    float m_shininess = 32.0f;         // Specular shininess
     float m_trailLength = 0.3f;        // Trail length (0-1)
-    float m_minDropSize = 10.0f;       // Minimum drop radius (pixels)
-    float m_maxDropSize = 40.0f;       // Maximum drop radius (pixels)
+    float m_minDropSize = 0.02f;       // Minimum drop radius (normalized)
+    float m_maxDropSize = 0.08f;       // Maximum drop radius (normalized)
     float m_dropletsRate = 50.0f;      // Background droplets spawn rate
     float m_collisionRadius = 0.65f;   // Collision detection radius
 

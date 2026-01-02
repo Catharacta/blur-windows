@@ -60,6 +60,7 @@ typedef struct {
     BlurRect bounds;                     ///< Initial window position and size.
     int32_t topMost;                     ///< 1 to stay on top of other windows.
     int32_t clickThrough;                ///< 1 to allow mouse clicks to pass through.
+    int32_t effectType;                  ///< 0: Gaussian, 1: Box, 2: Kawase, 3: Radial, 4: Rain.
 } BlurWindowOptionsC;
 
 #ifndef BLURWINDOW_API

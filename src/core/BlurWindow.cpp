@@ -97,8 +97,9 @@ public:
     void SetTopMost(bool enable) {
         if (!m_hwnd) return;
         
+        LOG_DEBUG("SetTopMost: {}", enable);
         SetWindowPos(m_hwnd,
-            enable ? HWND_TOPMOST : HWND_NOTOPMOST,
+            enable ? HWND_TOPMOST : HWND_BOTTOM, // Use HWND_BOTTOM to stay behind
             0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
         );
@@ -110,10 +111,14 @@ public:
         int newHeight = bounds.bottom - bounds.top;
         
         if (m_hwnd) {
-            SetWindowPos(m_hwnd, nullptr,
+            // Find appropriate Z-order: behind owner
+            HWND insertAfter = (m_owner && IsWindow(m_owner)) ? GetWindow(m_owner, GW_HWNDPREV) : HWND_BOTTOM;
+            if (insertAfter == NULL) insertAfter = HWND_BOTTOM;
+
+            SetWindowPos(m_hwnd, insertAfter,
                 bounds.left, bounds.top,
                 newWidth, newHeight,
-                SWP_NOZORDER | SWP_NOACTIVATE
+                SWP_NOACTIVATE | SWP_NOSENDCHANGING
             );
         }
         
@@ -214,20 +219,9 @@ public:
         LOG_INFO("SetEffectTypeInternal: Successfully switched to type {}", type);
     }
     
-    // Helper: Ensure RainEffect is active (must be called with m_graphicsMutex held)
-    RainEffect* EnsureRainEffect() {
-        auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
-        if (!rain) {
-            LOG_INFO("EnsureRainEffect: Current effect is not RainEffect, switching...");
-            SetEffectTypeInternal(static_cast<int>(EffectType::Rain));
-            rain = dynamic_cast<RainEffect*>(m_effect.get());
-            if (!rain) {
-                LOG_ERROR("EnsureRainEffect: Failed to switch to RainEffect");
-            } else {
-                LOG_INFO("EnsureRainEffect: Successfully switched to RainEffect");
-            }
-        }
-        return rain;
+    // Helper: Get RainEffect if it's the current effect
+    RainEffect* GetRainEffect() {
+        return dynamic_cast<RainEffect*>(m_effect.get());
     }
 
     void SetBlurParam(float param) {
@@ -270,32 +264,31 @@ public:
 
     void SetRainIntensity(float intensity) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        // Auto-enable RainEffect if intensity > 0
-        RainEffect* rain = (intensity > 0) ? EnsureRainEffect() : dynamic_cast<RainEffect*>(m_effect.get());
+        RainEffect* rain = GetRainEffect();
         if (rain) rain->SetRainIntensity(intensity);
     }
 
     void SetRainDropSpeed(float speed) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        RainEffect* rain = EnsureRainEffect();
+        RainEffect* rain = GetRainEffect();
         if (rain) rain->SetDropSpeed(speed);
     }
 
     void SetRainRefraction(float strength) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        RainEffect* rain = EnsureRainEffect();
+        RainEffect* rain = GetRainEffect();
         if (rain) rain->SetRefractionStrength(strength);
     }
 
     void SetRainTrailLength(float length) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        RainEffect* rain = EnsureRainEffect();
+        RainEffect* rain = GetRainEffect();
         if (rain) rain->SetTrailLength(length);
     }
 
     void SetRainDropSize(float minSize, float maxSize) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
-        RainEffect* rain = EnsureRainEffect();
+        RainEffect* rain = GetRainEffect();
         if (rain) rain->SetDropSizeRange(minSize, maxSize);
     }
 
@@ -351,10 +344,13 @@ private:
             }
         }
         // 2. Initialize effect
-        m_effect = SubsystemFactory::CreateEffect(EffectType::Gaussian);
+        // 2. Initialize effect using initial requested type
+        EffectType initialType = static_cast<EffectType>(m_options.initialEffectType);
+        LOG_INFO("Initializing effect with requested type %d", m_options.initialEffectType);
+        m_effect = SubsystemFactory::CreateEffect(initialType);
         if (m_effect) {
             if (!m_effect->Initialize(m_device)) {
-                LOG_ERROR("Failed to initialize Gaussian effect.");
+                LOG_ERROR("Failed to initialize effect type %d.", m_options.initialEffectType);
                 m_effect.reset();
             } else {
                 LOG_INFO("Effect initialized.");
@@ -395,7 +391,7 @@ private:
             LOG_ERROR("Initialization partial failure: Cap:%d, Eff:%d, Pres:%d", 
                 m_capture != nullptr, m_effect != nullptr, m_presenter != nullptr);
         } else {
-            LOG_INFO("All subsystems initialized successfully.");
+            LOG_INFO("All subsystems initialized successfully. Effect ready.");
         }
 
         return m_graphicsInitialized;
@@ -463,39 +459,48 @@ private:
         if (m_useDirectComp) {
             // DirectComposition: use WS_EX_NOREDIRECTIONBITMAP for direct composition
             exStyle |= WS_EX_NOREDIRECTIONBITMAP;
-            OutputDebugStringA("Creating window for DirectComposition\n");
         } else {
             // UpdateLayeredWindow: use WS_EX_LAYERED for alpha blending
             exStyle |= WS_EX_LAYERED;
-            OutputDebugStringA("Creating window for UpdateLayeredWindow\n");
         }
         
-        if (m_options.topMost) {
-            exStyle |= WS_EX_TOPMOST;
-        }
-        if (m_options.clickThrough) {
-            exStyle |= WS_EX_TRANSPARENT;
-        }
+        // clickThrough is ALWAYS true for performance and usability in this mode
+        exStyle |= WS_EX_TRANSPARENT;
 
         m_hwnd = CreateWindowExW(
             exStyle,
             CLASS_NAME,
             L"BlurWindow",
-            WS_POPUP | WS_VISIBLE,
+            WS_POPUP, // ShowWindow will handle visibility
             m_options.bounds.left,
             m_options.bounds.top,
             m_options.bounds.right - m_options.bounds.left,
             m_options.bounds.bottom - m_options.bounds.top,
-            m_owner,
+            nullptr, // Independent window to allow any Z-order
             nullptr,
             GetModuleHandleW(nullptr),
             nullptr
         );
         
-        // Exclude blur window from screen capture (Windows 10 2004+)
-        // This prevents infinite recursion where the blur window captures itself
         if (m_hwnd) {
+            // Force visibility without stealing focus
+            ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
+
+            // Exclude blur window from screen capture
             SetWindowDisplayAffinity(m_hwnd, WDA_EXCLUDEFROMCAPTURE);
+
+            // Z-Order: Place immediately behind the owner window
+            if (m_owner && IsWindow(m_owner)) {
+                SetWindowPos(m_hwnd, m_owner, 0, 0, 0, 0, 
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+                LOG_INFO("BlurWindow created and placed behind owner %p", m_owner);
+            } else {
+                SetWindowPos(m_hwnd, HWND_BOTTOM, 0, 0, 0, 0, 
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                LOG_INFO("BlurWindow created and placed at HWND_BOTTOM");
+            }
+        } else {
+            LOG_ERROR("Failed to create BlurWindow (Error: %lu)", GetLastError());
         }
     }
 
@@ -537,6 +542,15 @@ private:
             { // Strict lock around all D3D11 context usage
                 std::lock_guard<std::mutex> lock(m_graphicsMutex);
                 if (m_graphicsInitialized && m_capture && m_effect && m_presenter) {
+                    // Calculate delta time from last frame
+                    static auto lastFrameTime = clock::now();
+                    auto currentTime = clock::now();
+                    float deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
+                    lastFrameTime = currentTime;
+                    
+                    // Update effect simulation (needed for RainEffect drops)
+                    m_effect->Update(deltaTime);
+                    
                     ID3D11Texture2D* capturedTexture = nullptr;
                     // Inside lock, we rely on the 16ms/0ms timeout in DXGICapture to not block UI too long
                     if (m_capture->CaptureFrame(m_options.bounds, &capturedTexture)) {
