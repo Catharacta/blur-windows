@@ -39,6 +39,10 @@ public:
     void SetDropSpeed(float speed) { m_dropSpeed = speed; }
     void SetRefractionStrength(float strength) { m_refractionStrength = strength; }
     void SetTrailLength(float length) { m_trailLength = length; }
+    void SetDimensions(uint32_t width, uint32_t height) {
+        m_lastWidth = width;
+        m_lastHeight = height;
+    }
     void SetDropSizeRange(float minSize, float maxSize);
 
 private:

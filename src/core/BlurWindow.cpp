@@ -195,6 +195,12 @@ public:
     
     // Internal version without lock (must be called with m_graphicsMutex held)
     void SetEffectTypeInternal(int type) {
+        // Skip if same effect type (prevents recreation during parameter sync)
+        if (m_currentEffectType == type && m_effect != nullptr) {
+            LOG_DEBUG("SetEffectTypeInternal: skipping - already type %d", type);
+            return;
+        }
+        
         EffectType effectType = static_cast<EffectType>(type);
         LOG_DEBUG("SetEffectTypeInternal: switching to type {}", type);
         
@@ -216,6 +222,7 @@ public:
         newEffect->SetNoiseType(m_noiseType);
         newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
         m_effect = std::move(newEffect);
+        m_currentEffectType = type;
         LOG_INFO("SetEffectTypeInternal: Successfully switched to type {}", type);
     }
     
@@ -353,7 +360,8 @@ private:
                 LOG_ERROR("Failed to initialize effect type %d.", m_options.initialEffectType);
                 m_effect.reset();
             } else {
-                LOG_INFO("Effect initialized.");
+                m_currentEffectType = m_options.initialEffectType;
+                LOG_INFO("Effect initialized (type=%d).", m_options.initialEffectType);
             }
         }
         
@@ -548,6 +556,16 @@ private:
                     float deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
                     lastFrameTime = currentTime;
                     
+                    // For RainEffect, ensure dimensions are set before Update
+                    // This is needed because Update spawns drops but needs dimensions first
+                    if (auto* rainEffect = dynamic_cast<RainEffect*>(m_effect.get())) {
+                        uint32_t effectWidth = m_options.bounds.right - m_options.bounds.left;
+                        uint32_t effectHeight = m_options.bounds.bottom - m_options.bounds.top;
+                        if (effectWidth > 0 && effectHeight > 0) {
+                            rainEffect->SetDimensions(effectWidth, effectHeight);
+                        }
+                    }
+                    
                     // Update effect simulation (needed for RainEffect drops)
                     m_effect->Update(deltaTime);
                     
@@ -678,6 +696,7 @@ private:
     std::atomic<bool> m_running;
     std::atomic<float> m_currentFPS;
     float m_currentStrength = 1.0f;
+    int m_currentEffectType = -1;  // Track current effect type to skip redundant recreation
     float m_noiseIntensity = 0.0f;
     float m_noiseScale = 100.0f;
     float m_noiseSpeed = 1.0f;

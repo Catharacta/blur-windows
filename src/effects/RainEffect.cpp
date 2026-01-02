@@ -65,6 +65,11 @@ struct DropInstance {
     float seed;
 };
 
+cbuffer DropParams : register(b0) {
+    float2 resolution;
+    float2 padding;
+};
+
 StructuredBuffer<DropInstance> drops : register(t0);
 
 VSOutput main(VSInput input) {
@@ -79,8 +84,14 @@ VSOutput main(VSInput input) {
     
     // Convert UI (0..1, top-left) to NDC (-1..1, bottom-left)
     float2 ndcCenter = float2(drop.pos.x * 2.0 - 1.0, 1.0 - drop.pos.y * 2.0);
+    
+    // Codrops-style scaling: scaleX=1.0, scaleY=1.5 (raindrops are naturally taller)
+    // Also correct for aspect ratio (NDC is square, screen is not)
+    float aspectRatio = resolution.x / resolution.y;
+    float2 scale = float2(1.0 / aspectRatio, 1.5);
+    
     // Radius is in normalized [0,1] coords, convert to NDC by multiplying by 2
-    float2 quadOffset = (uv * 2.0 - 1.0) * drop.radius * 2.0;
+    float2 quadOffset = (uv * 2.0 - 1.0) * drop.radius * 2.0 * scale;
     
     output.position = float4(ndcCenter + quadOffset, 0.0, 1.0);
     return output;
@@ -89,6 +100,7 @@ VSOutput main(VSInput input) {
 
 // Raindrop rendering pixel shader
 // Produces NormalXY, Depth, Mask
+// Implements teardrop shape profile for realistic water drops
 static const char* g_RaindropPS = R"(
 struct VSOutput {
     float4 position : SV_Position;
@@ -98,17 +110,41 @@ struct VSOutput {
 
 float4 main(VSOutput input) : SV_Target {
     float2 uv = input.texcoord * 2.0 - 1.0;
-    float distSq = dot(uv, uv);
+    
+    // Teardrop shape: wider at top, narrower at bottom
+    // Apply y-dependent x scaling to create teardrop silhouette
+    float yFactor = (uv.y + 1.0) * 0.5;  // 0 at top, 1 at bottom
+    float xScale = lerp(1.0, 0.6, yFactor * yFactor);  // Narrower at bottom
+    float2 scaledUV = float2(uv.x / xScale, uv.y);
+    
+    // SDF for the teardrop shape
+    float distSq = dot(scaledUV, scaledUV);
     if (distSq > 1.0) discard;
     
-    float height = pow(max(0.0, 1.0 - distSq), 1.5);
-    float3 normal = normalize(float3(uv, height * 0.5));
+    // Height profile: dome at top, tapers to point at bottom
+    float dist = sqrt(distSq);
+    float baseHeight = sqrt(max(0.0, 1.0 - distSq));
+    // Modify height based on y position (lower = thinner)
+    float heightMod = lerp(1.0, 0.3, yFactor * yFactor);
+    float height = baseHeight * heightMod;
     
-    return float4(normal.xy * 0.5 + 0.5, height, 1.0);
+    // Normal calculation for teardrop surface
+    // Account for the x-scaling in normal calculation
+    float3 normal = normalize(float3(scaledUV.x * xScale, scaledUV.y * 0.8, height * 2.0));
+    
+    // Add slight randomization based on seed for variation
+    float seed = input.dropData.w;
+    normal.xy += (seed - 0.5) * 0.05;
+    normal = normalize(normal);
+    
+    // Gooey effect: smooth edges using alpha threshold
+    float alpha = smoothstep(0.95, 0.7, dist);
+    
+    return float4(normal.xy * 0.5 + 0.5, height, alpha);
 }
 )";
 
-// Refraction/composite pixel shader - Codrops "Ultimate Texture" Version
+// Refraction/composite pixel shader - Enhanced Codrops Style
 static const char* g_RefractionPS = R"(
 Texture2D backgroundFocus : register(t0);
 Texture2D dropTexture : register(t1);
@@ -122,31 +158,53 @@ cbuffer RefractionParams : register(b0) {
 };
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
-    // 1. Sample drop texture (R=NormX, G=NormY, B=Depth, A=Mask)
+    // 1. Sample drop texture (R=NormX, G=NormY, B=Depth, A=Alpha)
     float4 dropData = dropTexture.Sample(linearSampler, texcoord);
     
-    // Gooey threshold
-    if (dropData.a < 0.2) {
+    // Gooey threshold with smooth transition
+    float dropAlpha = dropData.a;
+    if (dropAlpha < 0.1) {
         return backgroundFocus.Sample(linearSampler, texcoord);
     }
     
-    // 2. High-fidelity Refraction
+    // 2. High-fidelity Refraction with depth-based intensity
     float2 normal = dropData.xy * 2.0 - 1.0;
-    float2 refractionOffset = normal * refractionStrength * 0.05;
+    float depth = dropData.z;
+    
+    // Refraction offset scales with depth (thicker = more refraction)
+    float2 refractionOffset = normal * refractionStrength * 0.08 * depth;
     float4 refractedColor = backgroundFocus.Sample(linearSampler, texcoord + refractionOffset);
     
-    // 3. Specular Highlight
-    float3 lightDir = normalize(float3(1.0, 1.0, 1.5));
+    // 3. Fresnel effect: stronger reflection at edges
+    float normalMag = length(normal);
+    float fresnel = pow(1.0 - depth, 2.0) * 0.5;
+    
+    // 4. Depth-based blue tint (distant drops appear bluer)
+    float3 depthTint = lerp(float3(1.0, 1.0, 1.0), float3(0.85, 0.9, 1.0), depth * 0.4);
+    
+    // 5. Specular Highlight with dual light sources
+    float3 lightDir1 = normalize(float3(0.8, 0.8, 1.2));
+    float3 lightDir2 = normalize(float3(-0.5, 0.3, 1.0));
     float3 viewDir = float3(0, 0, 1);
-    float3 dropNormal = normalize(float3(normal, dropData.z));
-    float spec = pow(max(dot(reflect(-lightDir, dropNormal), viewDir), 0.0), shininess);
-    float3 specularColor = float3(1.0, 1.0, 1.0) * spec;
+    float3 dropNormal = normalize(float3(normal, max(0.1, depth)));
     
-    // 4. Final blend
-    float3 finalColor = refractedColor.rgb * (0.8 + dropData.z * 0.2) + specularColor;
-    finalColor = lerp(finalColor, tintColor.rgb, tintColor.a);
+    float spec1 = pow(max(dot(reflect(-lightDir1, dropNormal), viewDir), 0.0), shininess);
+    float spec2 = pow(max(dot(reflect(-lightDir2, dropNormal), viewDir), 0.0), shininess * 0.5) * 0.3;
+    float3 specularColor = float3(1.0, 1.0, 1.0) * (spec1 + spec2);
     
-    return float4(finalColor, 1.0);
+    // 6. Edge highlight (rim lighting)
+    float rim = smoothstep(0.5, 0.9, normalMag) * 0.15;
+    
+    // 7. Final blend with smooth alpha transition
+    float3 baseColor = refractedColor.rgb * depthTint * (0.85 + depth * 0.15);
+    float3 finalColor = baseColor + specularColor + rim;
+    finalColor = lerp(finalColor, tintColor.rgb, tintColor.a * 0.5);
+    
+    // Smooth edge blending
+    float finalAlpha = smoothstep(0.1, 0.4, dropAlpha);
+    float4 background = backgroundFocus.Sample(linearSampler, texcoord);
+    
+    return float4(lerp(background.rgb, finalColor, finalAlpha), 1.0);
 }
 )";
 
@@ -261,15 +319,26 @@ bool RainEffect::Apply(
         return false;
     }
     
-    // Create/update drop texture if needed (before setting m_lastWidth/Height)
+    // Store dimensions for simulation FIRST (needed by Update which runs before Apply)
+    m_lastWidth = width;
+    m_lastHeight = height;
+    
+    // Create/update drop texture if needed
     if (!CreateDropTexture(width, height)) {
         LOG_ERROR("RainEffect::Apply - CreateDropTexture failed");
         return false;
     }
     
-    // Store dimensions for simulation (after texture creation)
-    m_lastWidth = width;
-    m_lastHeight = height;
+    // Spawn initial drops if none exist (first frame after initialization)
+    if (m_drops.empty() && m_rainIntensity > 0.0f) {
+        // Spawn several initial drops to have something visible immediately
+        int initialDrops = static_cast<int>(20 * m_rainIntensity);
+        for (int i = 0; i < initialDrops; ++i) {
+            SpawnNewDrops(width, height);
+        }
+        LOG_INFO("RainEffect: Spawned %d initial drops (now have %zu drops, intensity=%.2f)",
+            initialDrops, m_drops.size(), m_rainIntensity);
+    }
     
     // Debug log (every ~60 frames to avoid spam)
     static int frameCount = 0;
@@ -380,6 +449,11 @@ void RainEffect::Update(float deltaTime) {
 }
 
 void RainEffect::UpdateDrops(float deltaTime) {
+    // Skip if dimensions not yet set (Apply hasn't been called yet)
+    if (m_lastWidth == 0 || m_lastHeight == 0) {
+        return;
+    }
+    
     // Codrops-compatible simulation
     float timeScale = deltaTime * 60.0f; // Normalize to 60fps
     if (timeScale > 1.1f) timeScale = 1.1f;
@@ -599,19 +673,20 @@ void RainEffect::MergeDrops() {
 }
 
 void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width, uint32_t height) {
-    // Debug log at entry
+    // Debug log at entry - always log first 10 frames, then every 60
     static int renderLogCounter = 0;
-    bool shouldLog = (++renderLogCounter % 60 == 0);
+    bool shouldLog = (renderLogCounter < 10) || (renderLogCounter % 60 == 0);
+    renderLogCounter++;
     
     if (shouldLog) {
-        LOG_INFO("RenderDropTexture - context=%p, dropRTV=%p, raindropVS=%p, raindropPS=%p, drops=%zu",
-            context, m_dropRTV.Get(), m_raindropVS.Get(), m_raindropPS.Get(), m_drops.size());
+        LOG_INFO("RenderDropTexture[%d] - context=%p, dropRTV=%p, VS=%p, PS=%p, drops=%zu",
+            renderLogCounter, context, m_dropRTV.Get(), m_raindropVS.Get(), m_raindropPS.Get(), m_drops.size());
     }
     
     if (!m_dropRTV || !context || !m_raindropVS || !m_raindropPS || m_drops.empty()) {
         if (shouldLog) {
-            LOG_WARN("RenderDropTexture - Early return: dropRTV=%p, VS=%p, PS=%p, drops=%zu",
-                m_dropRTV.Get(), m_raindropVS.Get(), m_raindropPS.Get(), m_drops.size());
+            LOG_WARN("RenderDropTexture[%d] - Early return: dropRTV=%p, VS=%p, PS=%p, drops=%zu",
+                renderLogCounter, m_dropRTV.Get(), m_raindropVS.Get(), m_raindropPS.Get(), m_drops.size());
         }
         return;
     }
@@ -642,9 +717,25 @@ void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width,
         context->Unmap(m_instanceBuffer.Get(), 0);
     }
 
+    // Update vertex shader constant buffer with resolution (reuse m_blurParamsBuffer)
+    D3D11_MAPPED_SUBRESOURCE cbMapped;
+    if (SUCCEEDED(context->Map(m_blurParamsBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &cbMapped))) {
+        struct DropParams {
+            float resolution[2];
+            float padding[2];
+        };
+        DropParams* p = static_cast<DropParams*>(cbMapped.pData);
+        p->resolution[0] = static_cast<float>(width);
+        p->resolution[1] = static_cast<float>(height);
+        p->padding[0] = 0.0f;
+        p->padding[1] = 0.0f;
+        context->Unmap(m_blurParamsBuffer.Get(), 0);
+    }
+
     // Set shaders and resources
     context->VSSetShader(m_raindropVS.Get(), nullptr, 0);
     context->VSSetShaderResources(0, 1, m_instanceSRV.GetAddressOf());
+    context->VSSetConstantBuffers(0, 1, m_blurParamsBuffer.GetAddressOf());
     context->PSSetShader(m_raindropPS.Get(), nullptr, 0);
 
     // Render drops using instancing
