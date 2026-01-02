@@ -103,10 +103,20 @@ private:
     // Raindrop collections
     std::vector<Raindrop> m_drops;         // Large moving drops
 
-    // Droplets texture (background small drops)
+    // Droplets layer (background small drops)
     std::vector<uint8_t> m_dropletsData;   // CPU-side droplets texture
     uint32_t m_dropletsWidth = 0;
     uint32_t m_dropletsHeight = 0;
+    ComPtr<ID3D11Texture2D> m_dropletsGPUTexture;
+    ComPtr<ID3D11ShaderResourceView> m_dropletsSRV;
+    ComPtr<ID3D11RenderTargetView> m_dropletsRTV;
+    ComPtr<ID3D11PixelShader> m_dropletsPS;
+    float m_dropletsAlpha = 1.0f;          // Global alpha for fade effect
+    
+    // Droplets methods
+    void RenderDropletsTexture(ID3D11DeviceContext* context, uint32_t width, uint32_t height);
+    void WipeDroplets(float x, float y, float radius);
+    bool CreateDropletsGPUTexture(uint32_t width, uint32_t height);
 
     // Parameters
     float m_strength = 1.0f;

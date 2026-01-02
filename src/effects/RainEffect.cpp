@@ -46,7 +46,36 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
 }
 )";
 
-// Raindrop vertex shader for instancing
+// Droplets pixel shader - renders small background droplets
+// Uses the same teardrop profile as main drops but smaller
+static const char* g_DropletsPS = R"(
+struct VSOutput {
+    float4 position : SV_Position;
+    float2 texcoord : TEXCOORD0;
+    float4 dropData : TEXCOORD1;
+};
+
+cbuffer DropletsParams : register(b0) {
+    float globalAlpha;
+    float3 padding;
+};
+
+float4 main(VSOutput input) : SV_Target {
+    float2 uv = input.texcoord * 2.0 - 1.0;
+    
+    // Simple circular droplet (smaller and simpler than main drops)
+    float distSq = dot(uv, uv);
+    if (distSq > 1.0) discard;
+    
+    float dist = sqrt(distSq);
+    float height = sqrt(max(0.0, 1.0 - distSq)) * 0.5; // Lower profile
+    
+    float3 normal = normalize(float3(uv, height * 2.0));
+    float alpha = smoothstep(1.0, 0.5, dist) * globalAlpha;
+    
+    return float4(normal.xy * 0.5 + 0.5, height, alpha * 0.6);
+}
+)";
 static const char* g_RaindropVS = R"(
 struct VSInput {
     uint vertexId : SV_VertexID;
@@ -148,6 +177,7 @@ float4 main(VSOutput input) : SV_Target {
 static const char* g_RefractionPS = R"(
 Texture2D backgroundFocus : register(t0);
 Texture2D dropTexture : register(t1);
+Texture2D dropletsTexture : register(t2);
 SamplerState linearSampler : register(s0);
 
 cbuffer RefractionParams : register(b0) {
@@ -158,18 +188,29 @@ cbuffer RefractionParams : register(b0) {
 };
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
-    // 1. Sample drop texture (R=NormX, G=NormY, B=Depth, A=Alpha)
+    // 1. Sample both drop textures and combine
     float4 dropData = dropTexture.Sample(linearSampler, texcoord);
+    float4 dropletsData = dropletsTexture.Sample(linearSampler, texcoord);
+    
+    // Combine droplets and drops - droplets are background, drops are foreground
+    float4 combinedData = dropData;
+    if (dropletsData.a > 0.05 && dropData.a < 0.1) {
+        // Use droplets where there are no main drops
+        combinedData = dropletsData;
+    } else if (dropletsData.a > 0.05 && dropData.a >= 0.1) {
+        // Blend where both exist
+        combinedData = lerp(dropletsData, dropData, dropData.a);
+    }
     
     // Gooey threshold with smooth transition
-    float dropAlpha = dropData.a;
-    if (dropAlpha < 0.1) {
+    float dropAlpha = combinedData.a;
+    if (dropAlpha < 0.05) {
         return backgroundFocus.Sample(linearSampler, texcoord);
     }
     
     // 2. High-fidelity Refraction with depth-based intensity
-    float2 normal = dropData.xy * 2.0 - 1.0;
-    float depth = dropData.z;
+    float2 normal = combinedData.xy * 2.0 - 1.0;
+    float depth = combinedData.z;
     
     // Refraction offset scales with depth (thicker = more refraction)
     float2 refractionOffset = normal * refractionStrength * 0.08 * depth;
@@ -239,6 +280,12 @@ bool RainEffect::Initialize(ID3D11Device* device) {
     // Box blur shader for background blur
     if (!ShaderLoader::CompilePixelShader(device, g_BoxBlurPS, strlen(g_BoxBlurPS), "main", m_boxBlurPS.GetAddressOf())) {
         LOG_ERROR("RainEffect::Initialize - BoxBlurPS compilation failed");
+        return false;
+    }
+    
+    // Droplets shader for background small drops
+    if (!ShaderLoader::CompilePixelShader(device, g_DropletsPS, strlen(g_DropletsPS), "main", m_dropletsPS.GetAddressOf())) {
+        LOG_ERROR("RainEffect::Initialize - DropletsPS compilation failed");
         return false;
     }
     
@@ -388,7 +435,10 @@ bool RainEffect::Apply(
         context->PSSetShaderResources(0, 1, &nullSRV);
     }
     
-    // ===== Pass 1: Render raindrops to drop texture =====
+    // ===== Pass 1a: Render droplets (background small drops) =====
+    RenderDropletsTexture(context, width, height);
+    
+    // ===== Pass 1b: Render raindrops to drop texture =====
     RenderDropTexture(context, width, height);
     
     // ===== Pass 2: Apply refraction and composite =====
@@ -412,9 +462,9 @@ bool RainEffect::Apply(
         context->Unmap(m_constantBuffer.Get(), 0);
     }
     
-    // Set shader resources: blurred background + drop texture
-    ID3D11ShaderResourceView* srvs[2] = { m_blurredSRV.Get(), m_dropSRV.Get() };
-    context->PSSetShaderResources(0, 2, srvs);
+    // Set shader resources: blurred background + drop texture + droplets texture
+    ID3D11ShaderResourceView* srvs[3] = { m_blurredSRV.Get(), m_dropSRV.Get(), m_dropletsSRV.Get() };
+    context->PSSetShaderResources(0, 3, srvs);
     context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
     context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
     context->PSSetShader(m_refractionPS.Get(), nullptr, 0);
@@ -423,8 +473,8 @@ bool RainEffect::Apply(
     m_fullscreenRenderer.DrawFullscreen(context);
     
     // Cleanup: IMPORTANT to unbind SRVs to avoid binding loops in next frames
-    ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
-    context->PSSetShaderResources(0, 2, nullSRVs);
+    ID3D11ShaderResourceView* nullSRVs[3] = { nullptr, nullptr, nullptr };
+    context->PSSetShaderResources(0, 3, nullSRVs);
     
     return true;
 }
@@ -838,6 +888,99 @@ std::string RainEffect::GetParameters() const {
         R"({"intensity": %.2f, "dropSpeed": %.2f, "refraction": %.2f})",
         m_rainIntensity, m_dropSpeed, m_refractionStrength);
     return std::string(buffer);
+}
+
+// ========== Droplets Layer Functions ==========
+
+bool RainEffect::CreateDropletsGPUTexture(uint32_t width, uint32_t height) {
+    if (!m_device) return false;
+    
+    // Use 1/4 resolution for droplets (performance optimization)
+    uint32_t dropletW = width / 4;
+    uint32_t dropletH = height / 4;
+    if (dropletW == 0) dropletW = 1;
+    if (dropletH == 0) dropletH = 1;
+    
+    // Check if already created with correct size
+    if (m_dropletsGPUTexture && m_dropletsWidth == dropletW && m_dropletsHeight == dropletH) {
+        return true;
+    }
+    
+    m_dropletsWidth = dropletW;
+    m_dropletsHeight = dropletH;
+    
+    // Release old resources
+    m_dropletsGPUTexture.Reset();
+    m_dropletsSRV.Reset();
+    m_dropletsRTV.Reset();
+    
+    // Create texture
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = dropletW;
+    texDesc.Height = dropletH;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    
+    HRESULT hr = m_device->CreateTexture2D(&texDesc, nullptr, m_dropletsGPUTexture.GetAddressOf());
+    if (FAILED(hr)) {
+        LOG_ERROR("CreateDropletsGPUTexture: CreateTexture2D failed (0x%08X)", hr);
+        return false;
+    }
+    
+    hr = m_device->CreateShaderResourceView(m_dropletsGPUTexture.Get(), nullptr, m_dropletsSRV.GetAddressOf());
+    if (FAILED(hr)) return false;
+    
+    hr = m_device->CreateRenderTargetView(m_dropletsGPUTexture.Get(), nullptr, m_dropletsRTV.GetAddressOf());
+    if (FAILED(hr)) return false;
+    
+    // Initialize droplets data
+    m_dropletsData.resize(dropletW * dropletH * 4, 0);
+    
+    LOG_INFO("CreateDropletsGPUTexture: created %ux%u droplets texture", dropletW, dropletH);
+    return true;
+}
+
+void RainEffect::WipeDroplets(float x, float y, float radius) {
+    // Clear droplets in the path of a large drop
+    if (m_dropletsData.empty() || m_dropletsWidth == 0 || m_dropletsHeight == 0) return;
+    
+    int cx = static_cast<int>(x * m_dropletsWidth);
+    int cy = static_cast<int>(y * m_dropletsHeight);
+    int r = static_cast<int>(radius * m_dropletsWidth * 2.0f);
+    
+    for (int dy = -r; dy <= r; dy++) {
+        for (int dx = -r; dx <= r; dx++) {
+            int px = cx + dx;
+            int py = cy + dy;
+            
+            if (px >= 0 && px < static_cast<int>(m_dropletsWidth) &&
+                py >= 0 && py < static_cast<int>(m_dropletsHeight)) {
+                if (dx * dx + dy * dy <= r * r) {
+                    size_t idx = (py * m_dropletsWidth + px) * 4;
+                    // Fade out the alpha channel
+                    m_dropletsData[idx + 3] = static_cast<uint8_t>(m_dropletsData[idx + 3] * 0.2f);
+                }
+            }
+        }
+    }
+}
+
+void RainEffect::RenderDropletsTexture(ID3D11DeviceContext* context, uint32_t width, uint32_t height) {
+    if (!m_dropletsRTV || !context || !m_dropletsPS) return;
+    
+    // Create texture if needed
+    if (!CreateDropletsGPUTexture(width, height)) return;
+    
+    // For now, just clear to neutral - in future, render actual droplet instances
+    float clearColor[4] = { 0.5f, 0.5f, 0.0f, 0.0f };
+    context->ClearRenderTargetView(m_dropletsRTV.Get(), clearColor);
+    
+    // TODO: In a future iteration, render droplet instances similar to RenderDropTexture
+    // For now, droplets are handled by the CPU-side m_dropletsData and merged into the main texture
 }
 
 // Factory function for SubsystemFactory
