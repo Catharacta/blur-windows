@@ -195,6 +195,19 @@ BLURWINDOW_API void blur_enable_logging(BlurSystemHandle sys, int32_t enable, co
     (void)path;
 }
 
+// --- Click Callback ---
+
+BLURWINDOW_API BlurErrorCode blur_set_click_callback(
+    BlurWindowHandle window,
+    BlurClickCallback callback,
+    void* userData
+) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetClickCallback(reinterpret_cast<BlurWindow::ClickCallback>(callback), userData);
+    return BLUR_OK;
+}
+
 // --- Rain Effect Control ---
 
 BLURWINDOW_API BlurErrorCode blur_set_rain_intensity(BlurWindowHandle window, float intensity) {

@@ -253,6 +253,31 @@ BLURWINDOW_API BlurErrorCode blur_set_rain_trail_length(BlurWindowHandle window,
  */
 BLURWINDOW_API BlurErrorCode blur_set_rain_drop_size(BlurWindowHandle window, float minSize, float maxSize);
 
+// --- Click Callback ---
+
+/**
+ * @brief Callback type for click events on the blur window.
+ * @param window The window that was clicked.
+ * @param x Screen X coordinate of the click.
+ * @param y Screen Y coordinate of the click.
+ * @param userData User data passed to blur_set_click_callback.
+ */
+typedef void (*BlurClickCallback)(BlurWindowHandle window, int32_t x, int32_t y, void* userData);
+
+/**
+ * @brief Set a callback for click events on the blur window.
+ * @param window Window handle.
+ * @param callback Function to call when window is clicked (NULL to disable).
+ * @param userData User data passed to callback.
+ * @return BLUR_OK on success.
+ * @note Only works when clickThrough is 0 (false).
+ */
+BLURWINDOW_API BlurErrorCode blur_set_click_callback(
+    BlurWindowHandle window,
+    BlurClickCallback callback,
+    void* userData
+);
+
 // --- Utility ---
 
 /**

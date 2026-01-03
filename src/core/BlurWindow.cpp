@@ -9,6 +9,7 @@
 #include <mutex>
 #include <d3d11.h>
 #include <wrl/client.h>
+#include <windowsx.h>  // for GET_X_LPARAM, GET_Y_LPARAM
 
 using Microsoft::WRL::ComPtr;
 
@@ -299,6 +300,13 @@ public:
         if (rain) rain->SetDropSizeRange(minSize, maxSize);
     }
 
+    // --- Click Callback ---
+    void SetClickCallback(BlurWindow::ClickCallback callback, void* userData) {
+        m_clickCallback = callback;
+        m_clickUserData = userData;
+        LOG_INFO("SetClickCallback: callback=%p, userData=%p", (void*)callback, userData);
+    }
+
     bool IsInitialized() const {
         return m_graphicsInitialized;
     }
@@ -441,6 +449,32 @@ private:
         return SUCCEEDED(hr);
     }
 
+    // Static window procedure for handling click events
+    static LRESULT CALLBACK BlurWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+        if (msg == WM_NCCREATE) {
+            auto* cs = reinterpret_cast<CREATESTRUCT*>(lParam);
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
+        }
+        
+        Impl* self = reinterpret_cast<Impl*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        
+        if (self && msg == WM_LBUTTONDOWN) {
+            if (self->m_clickCallback) {
+                int x = GET_X_LPARAM(lParam);
+                int y = GET_Y_LPARAM(lParam);
+                // Convert to screen coordinates
+                POINT pt = { x, y };
+                ClientToScreen(hwnd, &pt);
+                // Call callback with screen coordinates
+                self->m_clickCallback(self, pt.x, pt.y, self->m_clickUserData);
+            }
+            return 0;
+        }
+        
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+
     void CreateBlurWindow() {
         // Register window class
         static bool classRegistered = false;
@@ -449,7 +483,7 @@ private:
         if (!classRegistered) {
             WNDCLASSEXW wc = {};
             wc.cbSize = sizeof(WNDCLASSEXW);
-            wc.lpfnWndProc = DefWindowProcW;
+            wc.lpfnWndProc = BlurWindowProc;
             wc.hInstance = GetModuleHandleW(nullptr);
             wc.lpszClassName = CLASS_NAME;
             wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));  // IDC_ARROW
@@ -489,7 +523,7 @@ private:
             m_owner,
             nullptr,
             GetModuleHandleW(nullptr),
-            nullptr
+            this  // Pass Impl pointer for WndProc
         );
         
         // Exclude blur window from screen capture (Windows 10 2004+)
@@ -696,6 +730,10 @@ private:
 
     mutable std::mutex m_graphicsMutex;
 
+    // Click callback
+    BlurWindow::ClickCallback m_clickCallback = nullptr;
+    void* m_clickUserData = nullptr;
+
     // Helper to check if DirectComposition should be used
     static bool ShouldUseDirectComposition() {
         // Try to load dcomp.dll
@@ -795,6 +833,10 @@ void BlurWindow::SetRainTrailLength(float length) {
 
 void BlurWindow::SetRainDropSize(float minSize, float maxSize) {
     m_impl->SetRainDropSize(minSize, maxSize);
+}
+
+void BlurWindow::SetClickCallback(ClickCallback callback, void* userData) {
+    m_impl->SetClickCallback(callback, userData);
 }
 
 void BlurWindow::SetClickThrough(bool enable) {

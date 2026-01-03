@@ -87,6 +87,16 @@ public:
     /// Set drop size range (in pixels)
     void SetRainDropSize(float minSize, float maxSize);
 
+    // --- Click Callback ---
+
+    /// Click callback type
+    using ClickCallback = void(*)(void* window, int32_t x, int32_t y, void* userData);
+
+    /// Set a callback for click events
+    /// @param callback Function to call when window is clicked (nullptr to disable)
+    /// @param userData User data passed to callback
+    void SetClickCallback(ClickCallback callback, void* userData);
+
     /// Enable/disable click-through
     /// @param enable true to enable click-through
     void SetClickThrough(bool enable);

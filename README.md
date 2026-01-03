@@ -3,10 +3,12 @@
 Windows 11向け高機能カスタムブラーウィンドウC++ライブラリ。
 OS標準の Acrylic や Mica よりも自由度の高いブラー、ティント、ノイズ合成を提供します。
 
+> **English documentation available**: [README (English)](README_EN.md)
+
 ## ドキュメント
 
-- [**導入ガイド (Usage Guide)**](docs/USAGE_GUIDE.md): ライブラリのセットアップ、必要ファイル、配置場所について。
-- [**C API リファレンス**](docs/C_API_REFERENCE.md): 他言語（Rust, C#等）から利用するための API 手引書。
+- [**導入ガイド (日本語)**](docs/USAGE_GUIDE.md) / [**Usage Guide (English)**](docs/USAGE_GUIDE_EN.md)
+- [**C API リファレンス (日本語)**](docs/C_API_REFERENCE.md) / [**C API Reference (English)**](docs/C_API_REFERENCE_EN.md)
 
 ## 主な特徴
 
