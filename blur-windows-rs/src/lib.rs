@@ -102,7 +102,25 @@ extern "C" {
         min_size: f32,
         max_size: f32,
     ) -> BlurErrorCode;
+
+    // Click Callback
+    pub fn blur_set_click_callback(
+        window: BlurWindowHandle,
+        callback: BlurClickCallback,
+        user_data: *mut std::ffi::c_void,
+    ) -> BlurErrorCode;
 }
+
+/// Click callback function type
+/// Parameters: window handle, x coordinate (screen), y coordinate (screen), user data
+pub type BlurClickCallback = Option<
+    unsafe extern "C" fn(
+        window: BlurWindowHandle,
+        x: i32,
+        y: i32,
+        user_data: *mut std::ffi::c_void,
+    ),
+>;
 
 // Safe wrapper implementation would go here...
 pub mod safe;
