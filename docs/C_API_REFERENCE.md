@@ -167,6 +167,46 @@ BLURWINDOW_API BlurErrorCode blur_set_rain_drop_size(BlurWindowHandle window, fl
 
 ---
 
+## Click Callback
+
+ブラーウィンドウがクリックされたときにコールバック関数を呼び出す機能です。
+
+> [!NOTE]
+> クリックコールバックは `clickThrough: 0` の場合のみ動作します。
+> `clickThrough: 1` の場合、クリックは背面のウィンドウに透過されます。
+
+### `BlurClickCallback` (型定義)
+```c
+typedef void (*BlurClickCallback)(BlurWindowHandle window, int32_t x, int32_t y, void* userData);
+```
+- `window`: クリックされたウィンドウのハンドル
+- `x`, `y`: クリック位置（スクリーン座標）
+- `userData`: `blur_set_click_callback` で渡したユーザーデータ
+
+### `blur_set_click_callback`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_click_callback(
+    BlurWindowHandle window,
+    BlurClickCallback callback,
+    void* userData
+);
+```
+クリックイベントのコールバックを設定します。
+
+**使用例 (C)**:
+```c
+void on_click(BlurWindowHandle window, int32_t x, int32_t y, void* userData) {
+    printf("Clicked at (%d, %d)\n", x, y);
+    blur_stop(window);
+    blur_destroy_window(window);
+}
+
+// 登録
+blur_set_click_callback(window, on_click, NULL);
+```
+
+---
+
 ## ユーティリティ
 
 ### `blur_get_hwnd`
