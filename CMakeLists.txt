@@ -47,6 +47,7 @@ set(CORE_SOURCES
     src/core/ResourceManager.cpp
     src/core/Logger.cpp
     src/core/FullscreenRenderer.cpp
+    src/core/stb_image_impl.cpp
 )
 
 # Source files - Capture

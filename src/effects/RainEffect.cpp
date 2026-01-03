@@ -550,7 +550,7 @@ void RainEffect::UpdateDrops(float deltaTime) {
                 if (px >= 0 && px < (int)m_dropletsWidth && py >= 0 && py < (int)m_dropletsHeight) {
                     float dist = std::sqrt((float)(dx*dx + dy*dy));
                     if (dist <= r) {
-                        float alpha = (1.0f - dist/r) * 0.3f;
+                        float alpha = (1.0f - dist/r) * 0.8f;  // Increased from 0.3 for visibility
                         size_t idx = (py * m_dropletsWidth + px) * 4;
                         m_dropletsData[idx + 3] = (std::max)(m_dropletsData[idx + 3], (uint8_t)(alpha * 255));
                     }
@@ -630,6 +630,9 @@ void RainEffect::UpdateDrops(float deltaTime) {
                 drop.killed = true;
                 continue;
             }
+            
+            // Wipe droplets in path of moving drop (Codrops: destination-out)
+            WipeDroplets(drop.x, drop.y, drop.radius / (float)m_lastWidth * 0.5f);
         }
         
         // Collision detection and incorporation (Codrops Merge logic)
