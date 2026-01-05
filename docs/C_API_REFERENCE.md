@@ -76,6 +76,8 @@ BLURWINDOW_API BlurErrorCode blur_set_effect_type(BlurWindowHandle window, int32
 - `2`: Box
 - `3`: Radial
 - `4`: Rain (雨粒エフェクト)
+- `5`: Glass (シンプルなすりガラス)
+- `6`: FrostedGlass (Voronoi歪み)
 
 ### `blur_set_strength`
 ```c

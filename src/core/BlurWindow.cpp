@@ -145,6 +145,8 @@ public:
         else if (jsonConfig.find("\"box\"") != std::string::npos) type = EffectType::Box;
         else if (jsonConfig.find("\"radial\"") != std::string::npos) type = EffectType::Radial;
         else if (jsonConfig.find("\"rain\"") != std::string::npos) type = EffectType::Rain;
+        else if (jsonConfig.find("\"frostedglass\"") != std::string::npos) type = EffectType::FrostedGlass;
+        else if (jsonConfig.find("\"glass\"") != std::string::npos) type = EffectType::Glass;
 
         LOG_INFO("SetEffectPipeline: detected type=%d from config", static_cast<int>(type));
 

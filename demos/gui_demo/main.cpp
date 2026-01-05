@@ -110,6 +110,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Box");
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Radial");
         SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Rain");
+        SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"Glass");
+        SendMessage(g_hComboEffect, CB_ADDSTRING, 0, (LPARAM)L"FrostedGlass");
         SendMessage(g_hComboEffect, CB_SETCURSEL, 0, 0);
 
         y += 40;
@@ -264,7 +266,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         
                         ShowWindow(g_blurWindow->GetHWND(), SW_SHOW);
                         
-                        const wchar_t* effectNames[] = { L"Gaussian", L"Kawase", L"Box", L"Radial", L"Rain" };
+                        const wchar_t* effectNames[] = { L"Gaussian", L"Kawase", L"Box", L"Radial", L"Rain", L"Glass", L"FrostedGlass" };
                         std::wstring msg = L"BlurWindow started (";
                         msg += effectNames[effectType];
                         msg += L" effect).";
@@ -330,10 +332,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     "{\"pipeline\": [{\"type\": \"kawase\"}]}",
                     "{\"pipeline\": [{\"type\": \"box\"}]}",
                     "{\"pipeline\": [{\"type\": \"radial\"}]}",
-                    "{\"pipeline\": [{\"type\": \"rain\"}]}"
+                    "{\"pipeline\": [{\"type\": \"rain\"}]}",
+                    "{\"pipeline\": [{\"type\": \"glass\"}]}",
+                    "{\"pipeline\": [{\"type\": \"frostedglass\"}]}"
                 };
-                const wchar_t* names[] = { L"Gaussian", L"Kawase", L"Box", L"Radial", L"Rain" };
-                if (sel >= 0 && sel < 5) {
+                const wchar_t* names[] = { L"Gaussian", L"Kawase", L"Box", L"Radial", L"Rain", L"Glass", L"FrostedGlass" };
+                if (sel >= 0 && sel < 7) {
                     if (g_blurWindow->SetEffectPipeline(configs[sel])) {
                         AppendLog(std::wstring(L"Effect changed to ") + names[sel]);
                     } else {
