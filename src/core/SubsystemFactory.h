@@ -19,7 +19,9 @@ enum class EffectType {
     Kawase,         // Kawase/Dual blur
     Box,            // Simple box blur
     Radial,         // Radial / Zoom blur
-    Rain            // Rain drops effect
+    Rain,           // Rain drops effect
+    Glass,          // Simple glass blur (from Rain effect)
+    FrostedGlass    // Voronoi distortion + blur
 };
 
 /// Presenter types
@@ -36,6 +38,8 @@ std::unique_ptr<IBlurEffect> CreateKawaseBlur();
 std::unique_ptr<IBlurEffect> CreateBoxBlur();
 std::unique_ptr<IBlurEffect> CreateRadialBlur();
 std::unique_ptr<IBlurEffect> CreateRainEffect();
+std::unique_ptr<IBlurEffect> CreateGlassBlur();
+std::unique_ptr<IBlurEffect> CreateFrostedGlassBlur();
 std::unique_ptr<IPresenter> CreateDirectCompPresenter();
 std::unique_ptr<IPresenter> CreateULWPresenter();
 
@@ -65,6 +69,10 @@ public:
                 return CreateRadialBlur();
             case EffectType::Rain:
                 return CreateRainEffect();
+            case EffectType::Glass:
+                return CreateGlassBlur();
+            case EffectType::FrostedGlass:
+                return CreateFrostedGlassBlur();
             default:
                 return nullptr;
         }
