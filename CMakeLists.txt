@@ -62,6 +62,8 @@ set(EFFECTS_SOURCES
     src/effects/BoxBlur.cpp
     src/effects/RadialBlur.cpp
     src/effects/RainEffect.cpp
+    src/effects/GlassBlur.cpp
+    src/effects/FrostedGlassBlur.cpp
 )
 
 # Source files - Presentation

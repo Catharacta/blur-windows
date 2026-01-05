@@ -76,6 +76,8 @@ Sets the blur effect type.
 - `2`: Box
 - `3`: Radial
 - `4`: Rain (raindrop effect)
+- `5`: Glass (simple frosted glass)
+- `6`: FrostedGlass (Voronoi distortion)
 
 ### `blur_set_strength`
 ```c
