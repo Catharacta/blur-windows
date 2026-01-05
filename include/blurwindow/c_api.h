@@ -176,6 +176,14 @@ BLURWINDOW_API BlurErrorCode blur_set_blur_param(BlurWindowHandle window, float 
  */
 BLURWINDOW_API BlurErrorCode blur_set_tint_color(BlurWindowHandle window, float r, float g, float b, float a);
 
+/**
+ * @brief Set the overall opacity of the blur effect.
+ * @param window Window handle.
+ * @param opacity 0.0 (transparent) to 1.0 (opaque).
+ * @return BLUR_OK on success.
+ */
+BLURWINDOW_API BlurErrorCode blur_set_opacity(BlurWindowHandle window, float opacity);
+
 // --- Noise Control ---
 
 /**

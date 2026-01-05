@@ -186,6 +186,13 @@ public:
         }
     }
 
+    void SetOpacity(float opacity) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        if (m_effect) {
+            m_effect->SetOpacity(opacity);
+        }
+    }
+
     void SetEffectType(int type) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
         SetEffectTypeInternal(type);
@@ -791,6 +798,10 @@ void BlurWindow::SetBlurStrength(float strength) {
 
 void BlurWindow::SetBlurColor(float r, float g, float b, float a) {
     m_impl->SetBlurColor(r, g, b, a);
+}
+
+void BlurWindow::SetOpacity(float opacity) {
+    m_impl->SetOpacity(opacity);
 }
 
 void BlurWindow::SetNoiseIntensity(float intensity) {

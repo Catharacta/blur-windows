@@ -242,6 +242,7 @@ public:
     void SetNoiseScale(float scale) override { m_noiseScale = std::clamp(scale, 1.0f, 1000.0f); }
     void SetNoiseSpeed(float speed) override { m_noiseSpeed = std::clamp(speed, 0.0f, 100.0f); }
     void SetNoiseType(int type) override { m_noiseType = std::clamp(type, 0, 5); }
+    void SetOpacity(float opacity) override { m_opacity = std::clamp(opacity, 0.0f, 1.0f); }
     void Update(float deltaTime) override { 
         m_currentTime += deltaTime * m_noiseSpeed;
         if (m_currentTime > 10000.0f) m_currentTime = fmod(m_currentTime, 10000.0f);
@@ -315,7 +316,7 @@ private:
     ComPtr<ID3D11ShaderResourceView> m_pingPongSRVs[2], m_noisedSRV;
     ComPtr<ID3D11RenderTargetView> m_pingPongRTVs[2], m_noisedRTV;
     uint32_t m_w = 0, m_h = 0;
-    float m_iterations = 4, m_offset = 1.0f, m_strength = 1.0f, m_tintColor[4] = {0}, m_noiseIntensity = 0, m_noiseScale = 100, m_noiseSpeed = 1, m_currentTime = 0;
+    float m_iterations = 4, m_offset = 1.0f, m_strength = 1.0f, m_opacity = 1.0f, m_tintColor[4] = {0}, m_noiseIntensity = 0, m_noiseScale = 100, m_noiseSpeed = 1, m_currentTime = 0;
     int m_noiseType = 0;
 };
 

@@ -150,6 +150,13 @@ BLURWINDOW_API BlurErrorCode blur_set_tint_color(BlurWindowHandle window, float 
     return BLUR_OK;
 }
 
+BLURWINDOW_API BlurErrorCode blur_set_opacity(BlurWindowHandle window, float opacity) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetOpacity(opacity);
+    return BLUR_OK;
+}
+
 BLURWINDOW_API BlurErrorCode blur_set_noise_scale(BlurWindowHandle window, float scale) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);

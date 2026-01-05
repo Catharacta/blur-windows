@@ -27,6 +27,7 @@ public:
     void SetNoiseScale(float scale) override { m_noiseScale = scale; }
     void SetNoiseSpeed(float speed) override { m_noiseSpeed = speed; }
     void SetNoiseType(int type) override { m_noiseType = type; }
+    void SetOpacity(float opacity) override { m_opacity = opacity; m_dirty = true; }
     void Update(float deltaTime) override { m_time += deltaTime; }
     bool SetParameters(const char* json) override;
     std::string GetParameters() const override;
@@ -39,6 +40,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Buffer> m_constantBuffer;
     
     float m_strength = 1.0f;
+    float m_opacity = 1.0f;
     float m_blurRadius = 5.0f;  // Controlled by blur_param
     float m_tintColor[4] = { 0, 0, 0, 0 };
     float m_noiseIntensity = 0.0f;

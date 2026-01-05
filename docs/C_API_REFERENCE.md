@@ -101,6 +101,12 @@ BLURWINDOW_API BlurErrorCode blur_set_tint_color(BlurWindowHandle window, float 
 ```
 ブラーにかける色 (RGBA, 各 0.0 ～ 1.0) を設定します。
 
+### `blur_set_opacity`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_opacity(BlurWindowHandle window, float opacity);
+```
+ブラーエフェクト全体の透明度 (0.0 = 完全透明, 1.0 = 完全不透明) を設定します。
+
 ---
 
 ## ノイズ制御
