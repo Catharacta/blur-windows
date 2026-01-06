@@ -18,7 +18,7 @@ cbuffer FrostedParams : register(b0) {
     float cellScale;
     float2 resolution;
     float time;
-    float padding;
+    float opacity;
     float4 tintColor;
 };
 
@@ -92,7 +92,7 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     float4 original = inputTexture.Sample(linearSampler, texcoord);
     float3 result = lerp(original.rgb, tinted, strength);
     
-    return float4(result, 1.0);
+    return float4(result, opacity);
 }
 )";
 
@@ -145,7 +145,7 @@ bool FrostedGlassBlur::Apply(ID3D11DeviceContext* context,
             float cellScale;
             float resolution[2];
             float time;
-            float padding;
+            float opacity;
             float tintColor[4];
         };
         Params* params = static_cast<Params*>(mapped.pData);
@@ -156,7 +156,7 @@ bool FrostedGlassBlur::Apply(ID3D11DeviceContext* context,
         params->resolution[0] = static_cast<float>(width);
         params->resolution[1] = static_cast<float>(height);
         params->time = m_time;
-        params->padding = 0.0f;
+        params->opacity = m_opacity;
         params->tintColor[0] = m_tintColor[0];
         params->tintColor[1] = m_tintColor[1];
         params->tintColor[2] = m_tintColor[2];

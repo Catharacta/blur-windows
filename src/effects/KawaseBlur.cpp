@@ -20,7 +20,8 @@ cbuffer KawaseParams : register(b0) {
     float offset;
     float isFinalPass;
     float strength;
-    float3 padding;
+    float opacity;
+    float2 padding;
     float4 tintColor;
 };
 
@@ -40,7 +41,7 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
         float4 original = originalTexture.Sample(linearSampler, texcoord);
         float4 result = lerp(original, blurred, strength);
         result.rgb = lerp(result.rgb, tintColor.rgb, tintColor.a * tintColor.a);
-        result.a = 1.0f; // Force opaque
+        result.a = opacity;
         return result;
     }
     return blurred;
@@ -266,7 +267,7 @@ public:
     }
 
 private:
-    struct KawaseParams { float texelSize[2]; float offset; float isFinalPass; float strength; float padding[3]; float tintColor[4]; };
+    struct KawaseParams { float texelSize[2]; float offset; float isFinalPass; float strength; float opacity; float padding[2]; float tintColor[4]; };
     struct NoiseParams { float noiseIntensity; float noiseScale; float time; int noiseType; };
 
     void UpdateConstantBuffer(ID3D11DeviceContext* ctx, uint32_t w, uint32_t h, float offset, float isFinal) {
@@ -274,7 +275,7 @@ private:
         if (SUCCEEDED(ctx->Map(m_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
             KawaseParams* p = (KawaseParams*)m.pData;
             p->texelSize[0] = 1.0f / w; p->texelSize[1] = 1.0f / h;
-            p->offset = offset; p->isFinalPass = isFinal; p->strength = m_strength;
+            p->offset = offset; p->isFinalPass = isFinal; p->strength = m_strength; p->opacity = m_opacity;
             memcpy(p->tintColor, m_tintColor, sizeof(m_tintColor));
             ctx->Unmap(m_constantBuffer.Get(), 0);
         }

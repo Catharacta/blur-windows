@@ -230,16 +230,6 @@ public:
         cbDesc.ByteWidth = sizeof(CompositeParams);
         hr = m_device->CreateBuffer(&cbDesc, nullptr, m_compositeConstantBuffer.GetAddressOf());
         if (FAILED(hr)) return false;
-        
-        // Create constant buffer for composite shader (strength only)
-        D3D11_BUFFER_DESC compCbDesc = {};
-        compCbDesc.ByteWidth = 16;  // float strength + float3 padding = 16 bytes
-        compCbDesc.Usage = D3D11_USAGE_DYNAMIC;
-        compCbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-        compCbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-        
-        hr = m_device->CreateBuffer(&compCbDesc, nullptr, m_compositeConstantBuffer.GetAddressOf());
-        if (FAILED(hr)) return false;
 
         D3D11_SAMPLER_DESC samplerDesc = {};
         samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;

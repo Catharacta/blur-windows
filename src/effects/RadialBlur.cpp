@@ -129,7 +129,8 @@ SamplerState linearSampler : register(s0);
 
 cbuffer CompositeParams : register(b0) {
     float strength;
-    float3 padding;
+    float opacity;
+    float2 padding;
     float4 tintColor;
 };
 
@@ -138,7 +139,7 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     float4 blurred = blurredTexture.Sample(linearSampler, texcoord);
     float4 result = lerp(original, blurred, strength);
     result.rgb = lerp(result.rgb, tintColor.rgb, tintColor.a * tintColor.a);
-    result.a = 1.0f;
+    result.a = opacity;
     return result;
 }
 )";
@@ -253,7 +254,7 @@ public:
 private:
     struct NoiseParams { float noiseIntensity, noiseScale, time; int noiseType; };
     struct RadialParams { float center[2]; float blurAmount, radius, samples; float padding[3]; };
-    struct CompositeParams { float strength; float padding[3]; float tintColor[4]; };
+    struct CompositeParams { float strength; float opacity; float padding[2]; float tintColor[4]; };
 
     void UpdateNoiseConstantBuffer(ID3D11DeviceContext* ctx) {
         D3D11_MAPPED_SUBRESOURCE m;
@@ -275,7 +276,7 @@ private:
         D3D11_MAPPED_SUBRESOURCE m;
         if (SUCCEEDED(ctx->Map(m_compositeConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
             CompositeParams* p = (CompositeParams*)m.pData;
-            p->strength = m_strength; memcpy(p->tintColor, m_tintColor, sizeof(m_tintColor));
+            p->strength = m_strength; p->opacity = m_opacity; memcpy(p->tintColor, m_tintColor, sizeof(m_tintColor));
             ctx->Unmap(m_compositeConstantBuffer.Get(), 0);
         }
     }
