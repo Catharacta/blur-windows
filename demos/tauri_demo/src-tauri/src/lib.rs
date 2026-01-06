@@ -74,9 +74,11 @@ fn start_blur(state: tauri::State<'_, BlurState>, effect_type: Option<i32>) -> R
 
     unsafe {
         if sys_lock.is_none() {
+            // Create log file path
+            let log_path = std::ffi::CString::new("blurwindow.log").unwrap();
             let sys_opts = BlurSystemOptionsC {
                 enable_logging: 1,
-                log_path: std::ptr::null(),
+                log_path: log_path.as_ptr(),
                 default_preset: 0,
             };
             let sys = blur_init(&sys_opts);
