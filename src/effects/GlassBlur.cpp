@@ -16,6 +16,8 @@ cbuffer GlassParams : register(b0) {
     float blurRadius;
     float2 resolution;
     float4 tintColor;
+    float opacity;
+    float3 padding;
 };
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
@@ -44,7 +46,7 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     float4 original = inputTexture.Sample(linearSampler, texcoord);
     float3 result = lerp(original.rgb, tinted, strength);
     
-    return float4(result, 1.0);
+    return float4(result, opacity);
 }
 )";
 
@@ -95,6 +97,8 @@ bool GlassBlur::Apply(ID3D11DeviceContext* context,
             float blurRadius;
             float resolution[2];
             float tintColor[4];
+            float opacity;
+            float padding[3];
         };
         Params* params = static_cast<Params*>(mapped.pData);
         params->strength = m_strength;
@@ -105,6 +109,7 @@ bool GlassBlur::Apply(ID3D11DeviceContext* context,
         params->tintColor[1] = m_tintColor[1];
         params->tintColor[2] = m_tintColor[2];
         params->tintColor[3] = m_tintColor[3];
+        params->opacity = m_opacity;
         context->Unmap(m_constantBuffer.Get(), 0);
     }
     

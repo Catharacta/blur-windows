@@ -188,6 +188,7 @@ public:
 
     void SetOpacity(float opacity) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        m_opacity = opacity;  // Save for effect switching
         if (m_effect) {
             m_effect->SetOpacity(opacity);
         }
@@ -220,6 +221,7 @@ public:
         newEffect->SetNoiseSpeed(m_noiseSpeed);
         newEffect->SetNoiseType(m_noiseType);
         newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
+        newEffect->SetOpacity(m_opacity);  // Restore opacity on effect switch
         m_effect = std::move(newEffect);
         LOG_INFO("SetEffectTypeInternal: Successfully switched to type {}", type);
     }
@@ -712,6 +714,7 @@ private:
     float m_noiseSpeed = 1.0f;
     int m_noiseType = 0;
     float m_tintColor[4] = { 0, 0, 0, 0 };
+    float m_opacity = 1.0f;
 
     // Resize request handling (deferred to RenderLoop for thread safety)
     std::atomic<bool> m_resizeRequested{false};
