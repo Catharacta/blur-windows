@@ -203,6 +203,8 @@ private:
     void EnumerateMonitors() {
         m_monitors.clear();
         
+        LOG_INFO("EnumerateMonitors: Starting monitor enumeration...");
+        
         ComPtr<IDXGIOutput> output;
         for (UINT i = 0; m_adapter->EnumOutputs(i, output.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; i++) {
             DXGI_OUTPUT_DESC desc;
@@ -221,8 +223,15 @@ private:
                 info.dpi = 96;  // Default DPI
             }
             
+            LOG_INFO("Monitor[%u]: bounds=(%d,%d,%d,%d), dpi=%u, primary=%d",
+                i, info.bounds.left, info.bounds.top, 
+                info.bounds.right, info.bounds.bottom,
+                info.dpi, info.isPrimary ? 1 : 0);
+            
             m_monitors.push_back(std::move(info));
         }
+        
+        LOG_INFO("EnumerateMonitors: Found %zu monitors.", m_monitors.size());
     }
 
     int FindMonitorForRegion(const RECT& region) const {
@@ -234,16 +243,25 @@ private:
             const RECT& bounds = m_monitors[i].bounds;
             if (centerX >= bounds.left && centerX < bounds.right &&
                 centerY >= bounds.top && centerY < bounds.bottom) {
+                LOG_DEBUG("FindMonitorForRegion: region=(%d,%d,%d,%d) center=(%d,%d) -> monitor %d",
+                    region.left, region.top, region.right, region.bottom,
+                    centerX, centerY, static_cast<int>(i));
                 return static_cast<int>(i);
             }
         }
         
         // Default to primary monitor
+        LOG_WARN("FindMonitorForRegion: region=(%d,%d,%d,%d) center=(%d,%d) not found, defaulting to monitor 0",
+            region.left, region.top, region.right, region.bottom, centerX, centerY);
         return 0;
     }
 
     bool InitializeDuplicationForMonitor(int monitorIndex) {
+        LOG_DEBUG("InitializeDuplicationForMonitor: Attempting to initialize for monitor %d", monitorIndex);
+        
         if (monitorIndex < 0 || monitorIndex >= static_cast<int>(m_monitors.size())) {
+            LOG_ERROR("InitializeDuplicationForMonitor: Invalid monitor index %d (total monitors: %zu)",
+                monitorIndex, m_monitors.size());
             return false;
         }
 
@@ -257,11 +275,21 @@ private:
         // Get Output1 for duplication
         ComPtr<IDXGIOutput1> output1;
         HRESULT hr = m_monitors[monitorIndex].output.As(&output1);
-        if (FAILED(hr)) return false;
+        if (FAILED(hr)) {
+            LOG_ERROR("InitializeDuplicationForMonitor: Failed to get IDXGIOutput1 for monitor %d (0x%08X)",
+                monitorIndex, hr);
+            return false;
+        }
 
         // Create desktop duplication
         hr = output1->DuplicateOutput(m_device, m_duplication.GetAddressOf());
         if (FAILED(hr)) {
+            LOG_ERROR("InitializeDuplicationForMonitor: DuplicateOutput FAILED for monitor %d (0x%08X)",
+                monitorIndex, hr);
+            // Common error codes:
+            // E_ACCESSDENIED (0x80070005): Another app has exclusive access
+            // DXGI_ERROR_NOT_CURRENTLY_AVAILABLE (0x887A0022): Desktop duplication not available
+            // DXGI_ERROR_UNSUPPORTED (0x887A0004): Unsupported operation
             return false;
         }
 
@@ -273,6 +301,11 @@ private:
 
         m_currentMonitorIndex = monitorIndex;
         m_initialized = true;
+        
+        const RECT& bounds = m_monitors[monitorIndex].bounds;
+        LOG_INFO("InitializeDuplicationForMonitor: SUCCESS monitor %d, output %ux%u, bounds=(%d,%d,%d,%d)",
+            monitorIndex, m_outputWidth, m_outputHeight,
+            bounds.left, bounds.top, bounds.right, bounds.bottom);
         return true;
     }
 
