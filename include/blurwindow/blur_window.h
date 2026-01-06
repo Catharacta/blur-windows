@@ -70,6 +70,9 @@ public:
     /// Set blur-specific parameter (Sigma for Gaussian, Radius for Box, Iterations for Kawase)
     void SetBlurParam(float param);
 
+    /// Set overall opacity (0.0 = transparent, 1.0 = opaque)
+    void SetOpacity(float opacity);
+
     // --- Rain Effect Control ---
 
     /// Set rain effect intensity (0.0 to 1.0)

@@ -165,7 +165,8 @@ SamplerState linearSampler : register(s0);
 
 cbuffer CompositeParams : register(b0) {
     float strength;
-    float3 padding;
+    float opacity;
+    float2 padding;
     float4 tintColor;
 };
 
@@ -173,8 +174,8 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     float4 original = originalTexture.Sample(linearSampler, texcoord);
     float4 blurred = blurredTexture.Sample(linearSampler, texcoord);
     float4 result = lerp(original, blurred, strength);
-    result.rgb = lerp(result.rgb, tintColor.rgb, tintColor.a * tintColor.a); // Apply tinting, tintColor.a acts as strength
-    result.a = 1.0f; // Force opaque to prevent transparency issues
+    result.rgb = lerp(result.rgb, tintColor.rgb, tintColor.a * tintColor.a);
+    result.a = opacity;  // Apply opacity
     return result;
 }
 )";
@@ -357,6 +358,10 @@ public:
         m_tintColor[3] = a;
     }
 
+    void SetOpacity(float opacity) override {
+        m_opacity = std::clamp(opacity, 0.0f, 1.0f);
+    }
+
     void SetNoiseIntensity(float intensity) override {
         m_noiseIntensity = std::clamp(intensity, 0.0f, 1.0f);
     }
@@ -415,7 +420,8 @@ private:
 
     struct CompositeParams {
         float strength;
-        float padding[3];
+        float opacity;
+        float padding[2];
         float tintColor[4];
     };
 
@@ -424,6 +430,7 @@ private:
         if (SUCCEEDED(context->Map(m_compositeConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
             CompositeParams* params = static_cast<CompositeParams*>(mapped.pData);
             params->strength = m_strength;
+            params->opacity = m_opacity;
             params->tintColor[0] = m_tintColor[0];
             params->tintColor[1] = m_tintColor[1];
             params->tintColor[2] = m_tintColor[2];
@@ -546,6 +553,7 @@ private:
     // Blur parameters
     float m_sigma = 5.0f;
     float m_strength = 1.0f;
+    float m_opacity = 1.0f;
     float m_tintColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     // Noise parameters

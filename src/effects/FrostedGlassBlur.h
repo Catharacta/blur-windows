@@ -27,6 +27,7 @@ public:
     void SetNoiseScale(float scale) override { m_cellScale = scale; }
     void SetNoiseSpeed(float speed) override { m_animSpeed = speed; }
     void SetNoiseType(int type) override { /* Not used */ }
+    void SetOpacity(float opacity) override { m_opacity = opacity; m_dirty = true; }
     void Update(float deltaTime) override { m_time += deltaTime * m_animSpeed; }
     bool SetParameters(const char* json) override;
     std::string GetParameters() const override;
@@ -37,6 +38,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Buffer> m_constantBuffer;
     
     float m_strength = 1.0f;
+    float m_opacity = 1.0f;
     float m_blurRadius = 8.0f;
     float m_distortionStrength = 0.02f;  // Voronoi distortion amount
     float m_cellScale = 50.0f;           // Voronoi cell size

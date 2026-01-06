@@ -30,6 +30,7 @@ public:
     void SetNoiseScale(float scale) override { m_noiseScale = scale; }
     void SetNoiseSpeed(float speed) override { m_noiseSpeed = speed; }
     void SetNoiseType(int type) override { m_noiseType = type; }
+    void SetOpacity(float opacity) override { m_opacity = opacity; }
     void Update(float deltaTime) override;
     bool SetParameters(const char* json) override;
     std::string GetParameters() const override;
@@ -97,6 +98,7 @@ private:
 
     // Parameters
     float m_strength = 1.0f;
+    float m_opacity = 1.0f;
     float m_tintColor[4] = { 0, 0, 0, 0 };
     float m_noiseIntensity = 0.0f;
     float m_noiseScale = 100.0f;

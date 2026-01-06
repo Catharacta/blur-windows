@@ -101,6 +101,12 @@ BLURWINDOW_API BlurErrorCode blur_set_tint_color(BlurWindowHandle window, float 
 ```
 Sets the tint color overlay (RGBA, each 0.0 to 1.0).
 
+### `blur_set_opacity`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_opacity(BlurWindowHandle window, float opacity);
+```
+Sets the overall opacity of the blur effect (0.0 = transparent, 1.0 = opaque).
+
 ---
 
 ## Noise Control

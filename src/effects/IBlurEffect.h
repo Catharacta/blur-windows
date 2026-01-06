@@ -43,6 +43,9 @@ public:
     /// Set tint color
     virtual void SetColor(float r, float g, float b, float a) = 0;
 
+    /// Set overall opacity (0.0 = transparent, 1.0 = opaque)
+    virtual void SetOpacity(float opacity) = 0;
+
     /// Set noise intensity (0.0 to 1.0)
     virtual void SetNoiseIntensity(float intensity) = 0;
 
