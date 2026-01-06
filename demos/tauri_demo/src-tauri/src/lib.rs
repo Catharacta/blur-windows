@@ -40,6 +40,7 @@ extern "C" {
     fn blur_set_strength(window: *mut std::ffi::c_void, strength: f32) -> i32;
     fn blur_set_blur_param(window: *mut std::ffi::c_void, param: f32) -> i32;
     fn blur_set_tint_color(window: *mut std::ffi::c_void, r: f32, g: f32, b: f32, a: f32) -> i32;
+    fn blur_set_opacity(window: *mut std::ffi::c_void, opacity: f32) -> i32;
     fn blur_set_noise_intensity(window: *mut std::ffi::c_void, intensity: f32) -> i32;
     fn blur_set_noise_scale(window: *mut std::ffi::c_void, scale: f32) -> i32;
     fn blur_set_noise_speed(window: *mut std::ffi::c_void, speed: f32) -> i32;
