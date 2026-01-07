@@ -9,6 +9,37 @@ It is designed to be used from other languages such as Rust, C#, and Python via 
 - `BlurSystemHandle`: System handle managing the library's lifecycle. (`void*`)
 - `BlurWindowHandle`: Window handle managing individual blur windows. (`void*`)
 
+### Enumerations
+
+#### `BlurQualityPreset`
+Quality presets.
+| Value | Name | Description |
+|---|---|---|
+| 0 | `BLUR_PRESET_HIGH` | High quality, multi-pass rendering |
+| 1 | `BLUR_PRESET_BALANCED` | Balanced quality and performance |
+| 2 | `BLUR_PRESET_PERFORMANCE` | Performance-oriented |
+| 3 | `BLUR_PRESET_MINIMAL` | Minimum overhead |
+
+#### `BlurErrorCode`
+Return values for API functions.
+| Value | Name | Description |
+|---|---|---|
+| 0 | `BLUR_OK` | Success |
+| -1 | `BLUR_ERROR_NOT_INITIALIZED` | System not initialized |
+| -2 | `BLUR_ERROR_INVALID_HANDLE` | Invalid handle |
+| -3 | `BLUR_ERROR_INVALID_PARAMETER` | Invalid parameter |
+| -4 | `BLUR_ERROR_D3D11_FAILED` | Direct3D 11 operation failed |
+| -5 | `BLUR_ERROR_CAPTURE_FAILED` | Desktop capture failed |
+| -99 | `BLUR_ERROR_UNKNOWN` | Unknown error |
+
+#### `BlurCaptureMethod`
+Capture method selection.
+| Value | Name | Description |
+|---|---|---|
+| 0 | `BLUR_CAPTURE_AUTO` | Auto-select (WGC preferred, fallback to DXGI) |
+| 1 | `BLUR_CAPTURE_DXGI` | Desktop Duplication API (Windows 8+) |
+| 2 | `BLUR_CAPTURE_WGC` | Windows Graphics Capture (Windows 10 1803+, cross-GPU capable) |
+
 ### Structures
 #### `BlurRect`
 Specifies the window bounds.
@@ -16,16 +47,22 @@ Specifies the window bounds.
 
 #### `BlurSystemOptionsC`
 Options for system initialization.
-- `int32_t enableLogging`: Enable logging output (0: disabled, 1: enabled)
-- `const char* logPath`: Path to log file (NULL for console output)
-- `int32_t defaultPreset`: Default quality preset (0: High, 1: Balanced, 2: Performance, 3: Minimal)
+| Field | Type | Description |
+|---|---|---|
+| `enableLogging` | `int32_t` | Enable logging output (0: disabled, 1: enabled) |
+| `logPath` | `const char*` | Path to log file (NULL for console output) |
+| `defaultPreset` | `BlurQualityPreset` | Default quality preset |
+| `captureMethod` | `BlurCaptureMethod` | Default capture method |
 
 #### `BlurWindowOptionsC`
 Options for window creation.
-- `void* owner`: Parent window HWND (NULL for standalone window)
-- `BlurRect bounds`: Initial position and size
-- `int32_t topMost`: Always on top (0: disabled, 1: enabled)
-- `int32_t clickThrough`: Pass clicks through to background (0: disabled, 1: enabled)
+| Field | Type | Description |
+|---|---|---|
+| `owner` | `void*` | Parent window HWND (NULL for standalone window) |
+| `bounds` | `BlurRect` | Initial position and size |
+| `topMost` | `int32_t` | Always on top (0: disabled, 1: enabled) |
+| `clickThrough` | `int32_t` | Pass clicks through to background (0: disabled, 1: enabled) |
+| `captureMethod` | `BlurCaptureMethod` | Capture method preference (0=Auto) |
 
 ---
 
@@ -109,6 +146,25 @@ Sets the overall opacity of the blur effect (0.0 = transparent, 1.0 = opaque).
 
 ---
 
+## Capture Method Control
+
+### `blur_set_capture_method`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_capture_method(BlurWindowHandle window, BlurCaptureMethod method);
+```
+Changes the capture method.
+
+| Method | Description |
+|---|---|
+| `BLUR_CAPTURE_AUTO` | Uses WGC if available, otherwise falls back to DXGI |
+| `BLUR_CAPTURE_DXGI` | Desktop Duplication API. Only supports monitors on the same GPU |
+| `BLUR_CAPTURE_WGC` | Windows Graphics Capture. Supports cross-GPU capture |
+
+> [!NOTE]
+> Changing the capture method will restart the capture session.
+
+---
+
 ## Noise Control
 
 ### `blur_set_noise_intensity`
@@ -116,6 +172,18 @@ Sets the overall opacity of the blur effect (0.0 = transparent, 1.0 = opaque).
 BLURWINDOW_API BlurErrorCode blur_set_noise_intensity(BlurWindowHandle window, float intensity);
 ```
 Sets the noise intensity.
+
+### `blur_set_noise_scale`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_noise_scale(BlurWindowHandle window, float scale);
+```
+Sets the spatial scale of the noise pattern (1.0 to 1000.0).
+
+### `blur_set_noise_speed`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_noise_speed(BlurWindowHandle window, float speed);
+```
+Sets the noise animation speed (0 for static).
 
 ### `blur_set_noise_type`
 ```c
@@ -231,3 +299,19 @@ Use this for Z-order control or direct Win32 API operations.
 BLURWINDOW_API float blur_get_fps(BlurWindowHandle window);
 ```
 Gets the current rendering FPS.
+
+### `blur_get_last_error`
+```c
+BLURWINDOW_API const char* blur_get_last_error(void);
+```
+Gets the last error message.
+
+**Returns**: Error message string (static memory, no free required)
+
+### `blur_enable_logging`
+```c
+BLURWINDOW_API void blur_enable_logging(BlurSystemHandle sys, int32_t enable, const char* path);
+```
+Dynamically enables/disables logging.
+- `enable`: 1 to enable, 0 to disable
+- `path`: Log file path (NULL for console output)
