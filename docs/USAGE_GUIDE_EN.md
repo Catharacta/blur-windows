@@ -54,3 +54,33 @@ The release package (ZIP) includes the following files:
 ### Unresolved symbol (LNK2019) error
 - Verify that `blurwindow.lib` is correctly linked and the library path is set.
 - When using the C API from C++, ensure it's wrapped with `extern "C"` (`c_api.h` handles this automatically).
+
+---
+
+## Multi-Monitor Support
+
+The `blurwindow` library supports multi-monitor environments.
+
+### Supported Features
+
+- **Automatic monitor detection**: Detects all connected monitors automatically
+- **Dynamic monitor switching**: Captures from the appropriate monitor based on blur window position
+- **DPI awareness**: Considers DPI scaling for each monitor
+
+### Limitations (Desktop Duplication API)
+
+> ⚠️ **Important**: The current capture method (Desktop Duplication API) **does not support blur across different GPUs (adapters)**.
+
+| Configuration | Support Status |
+|---------------|----------------|
+| Multiple monitors on the same GPU | ✅ Supported |
+| Monitors distributed across different GPUs (integrated + discrete, etc.) | ❌ Primary GPU monitors only |
+
+**Examples**: 
+- Main monitor (integrated GPU) + Sub monitor (integrated GPU) → ✅ Both can be blurred
+- Main monitor (integrated GPU) + Sub monitor (NVIDIA GPU) → ❌ Main monitor only
+
+### Future Plans
+
+Cross-GPU blur support is planned through Windows Graphics Capture API integration.
+
