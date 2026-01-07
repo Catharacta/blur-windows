@@ -57,7 +57,6 @@ The release package (ZIP) includes the following files:
 
 ---
 
-## Multi-Monitor Support
 ## Multi-monitor Support and Capture Methods
 
 Since version 0.1.0, BlurWindow supports two capture methods:
