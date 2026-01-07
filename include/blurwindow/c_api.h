@@ -39,6 +39,14 @@ typedef enum {
     BLUR_ERROR_UNKNOWN = -99             ///< An unexpected error occurred.
 } BlurErrorCode;
 
+/// Capture method types.
+typedef enum {
+    BLUR_CAPTURE_AUTO = 0,               ///< Auto-select (WGC if available, else DXGI).
+    BLUR_CAPTURE_DXGI = 1,               ///< Desktop Duplication API (Windows 8+).
+    BLUR_CAPTURE_WGC = 2                 ///< Windows Graphics Capture (Windows 10 1803+).
+} BlurCaptureMethod;
+
+
 /// Rect structure for window bounds.
 typedef struct {
     int32_t left;
@@ -52,6 +60,7 @@ typedef struct {
     int32_t enableLogging;               ///< 0 = false, 1 = true.
     const char* logPath;                 ///< Path to log file (NULL for console).
     BlurQualityPreset defaultPreset;     ///< Default quality level.
+    BlurCaptureMethod captureMethod;     ///< Default capture method.
 } BlurSystemOptionsC;
 
 /// Per-window creation options.
@@ -60,6 +69,7 @@ typedef struct {
     BlurRect bounds;                     ///< Initial window position and size.
     int32_t topMost;                     ///< 1 to stay on top of other windows.
     int32_t clickThrough;                ///< 1 to allow mouse clicks to pass through.
+    BlurCaptureMethod captureMethod;     ///< Capture method preference (0=Auto).
 } BlurWindowOptionsC;
 
 #ifndef BLURWINDOW_API
@@ -139,6 +149,15 @@ BLURWINDOW_API BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const ch
  * @return BLUR_OK on success.
  */
 BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds);
+
+/**
+ * @brief Set the capture method.
+ * @param window Window handle.
+ * @param method Capture method (Auto, DXGI, WGC).
+ * @return BLUR_OK on success.
+ * @note Changing this may cause the capture session to restart.
+ */
+BLURWINDOW_API BlurErrorCode blur_set_capture_method(BlurWindowHandle window, BlurCaptureMethod method);
 
 // --- Effect Management ---
 

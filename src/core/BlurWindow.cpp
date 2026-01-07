@@ -198,6 +198,28 @@ public:
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
         SetEffectTypeInternal(type);
     }
+
+    void SetCaptureMethod(CaptureType type) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        
+        LOG_INFO("SetCaptureMethod: switching to type %d", static_cast<int>(type));
+        
+        if (m_capture) {
+            m_capture->Shutdown();
+            m_capture.reset();
+        }
+        
+        m_capture = SubsystemFactory::CreateCapture(type);
+        if (m_capture) {
+            if (!m_capture->Initialize(m_device)) {
+                LOG_ERROR("Failed to initialize new capture subsystem.");
+                m_capture.reset();
+            } else {
+                if (m_hwnd) m_capture->SetSelfWindow(m_hwnd);
+                LOG_INFO("New capture subsystem initialized.");
+            }
+        }
+    }
     
     // Internal version without lock (must be called with m_graphicsMutex held)
     void SetEffectTypeInternal(int type) {
@@ -796,6 +818,10 @@ bool BlurWindow::IsInitialized() const {
 
 bool BlurWindow::SetEffectPipeline(const std::string& jsonConfig) {
     return m_impl->SetEffectPipeline(jsonConfig);
+}
+
+void BlurWindow::SetCaptureMethod(CaptureType type) {
+    m_impl->SetCaptureMethod(type);
 }
 
 void BlurWindow::SetPreset(QualityPreset preset) {

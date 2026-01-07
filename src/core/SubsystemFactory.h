@@ -3,16 +3,12 @@
 #include "../capture/ICaptureSubsystem.h"
 #include "../effects/IBlurEffect.h"
 #include "../presentation/IPresenter.h"
+#include "blurwindow/blurwindow.h"
 #include <memory>
 
 namespace blurwindow {
 
-/// Capture subsystem types
-enum class CaptureType {
-    Auto,           // Auto-select (WGC if available, else DXGI)
-    DXGI,           // DXGI Desktop Duplication
-    WGC             // Windows.Graphics.Capture (cross-GPU capable)
-};
+// CaptureType is now defined in blurwindow.h
 
 /// Effect types
 enum class EffectType {

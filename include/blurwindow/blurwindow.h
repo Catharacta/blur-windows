@@ -42,12 +42,20 @@ enum class QualityPreset {
     Minimal      ///< Minimum quality, lowest GPU load
 };
 
+/// Capture subsystem types
+enum class CaptureType {
+    Auto,           // Auto-select (WGC if available, else DXGI)
+    DXGI,           // DXGI Desktop Duplication
+    WGC             // Windows.Graphics.Capture (cross-GPU capable)
+};
+
 /// Window creation options
 struct WindowOptions {
     HWND owner = nullptr;       ///< Owner window handle
     RECT bounds = {0, 0, 0, 0}; ///< Window bounds (screen coordinates)
     bool topMost = true;        ///< Always on top
     bool clickThrough = true;   ///< Click-through window
+    CaptureType captureMethod = CaptureType::Auto; ///< Capture method preference
 };
 
 /// System initialization options
@@ -56,6 +64,7 @@ struct BlurSystemOptions {
     const char* logPath = nullptr;        ///< Log file path (nullptr for console)
     void (*logCallback)(const char* message) = nullptr; ///< Optional log callback
     QualityPreset defaultPreset = QualityPreset::Balanced; ///< Default quality preset
+    CaptureType captureMethod = CaptureType::Auto; ///< Default capture method
 };
 
 /// Main blur system class (singleton)
