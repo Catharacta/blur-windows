@@ -9,8 +9,9 @@ namespace blurwindow {
 
 /// Capture subsystem types
 enum class CaptureType {
-    DXGI,           // DXGI Desktop Duplication (default)
-    WGC             // Windows.Graphics.Capture (future)
+    Auto,           // Auto-select (WGC if available, else DXGI)
+    DXGI,           // DXGI Desktop Duplication
+    WGC             // Windows.Graphics.Capture (cross-GPU capable)
 };
 
 /// Effect types
@@ -33,6 +34,8 @@ enum class PresenterType {
 
 // Forward declarations for factory functions (defined in respective .cpp files)
 std::unique_ptr<ICaptureSubsystem> CreateDXGICapture();
+std::unique_ptr<ICaptureSubsystem> CreateWGCCapture();  // Windows Graphics Capture
+bool IsWGCAvailable();  // Check if WGC is available on this system
 std::unique_ptr<IBlurEffect> CreateGaussianBlur();
 std::unique_ptr<IBlurEffect> CreateKawaseBlur();
 std::unique_ptr<IBlurEffect> CreateBoxBlur();
@@ -47,12 +50,26 @@ std::unique_ptr<IPresenter> CreateULWPresenter();
 class SubsystemFactory {
 public:
     /// Create a capture subsystem
-    static std::unique_ptr<ICaptureSubsystem> CreateCapture(CaptureType type = CaptureType::DXGI) {
+    static std::unique_ptr<ICaptureSubsystem> CreateCapture(CaptureType type = CaptureType::Auto) {
         switch (type) {
-            case CaptureType::DXGI:
+            case CaptureType::Auto:
+                // Try WGC first (cross-GPU capable), fall back to DXGI
+                if (IsWGCAvailable()) {
+                    auto wgc = CreateWGCCapture();
+                    if (wgc) {
+                        OutputDebugStringA("Using Windows Graphics Capture\n");
+                        return wgc;
+                    }
+                }
+                OutputDebugStringA("WGC not available, using DXGI Desktop Duplication\n");
                 return CreateDXGICapture();
+                
+            case CaptureType::WGC:
+                return CreateWGCCapture();
+                
+            case CaptureType::DXGI:
             default:
-                return nullptr;
+                return CreateDXGICapture();
         }
     }
 

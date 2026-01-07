@@ -403,4 +403,9 @@ std::unique_ptr<ICaptureSubsystem> CreateWGCCapture() {
     return std::make_unique<WGCCapture>();
 }
 
+// Check if WGC is available (exported for SubsystemFactory)
+bool IsWGCAvailable() {
+    return WGCCapture::IsAvailable();
+}
+
 } // namespace blurwindow
