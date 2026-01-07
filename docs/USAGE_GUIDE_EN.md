@@ -58,29 +58,30 @@ The release package (ZIP) includes the following files:
 ---
 
 ## Multi-Monitor Support
+## Multi-monitor Support and Capture Methods
 
-The `blurwindow` library supports multi-monitor environments.
+Since version 0.1.0, BlurWindow supports two capture methods:
 
-### Supported Features
+1.  **DXGI Desktop Duplication API**:
+    *   Available on Windows 8 and later.
+    *   **Limitation**: Capture between monitors connected to different GPUs is NOT supported (e.g., hybrid graphics setups with iGPU and dGPU). Attempting to blur a window on a different GPU will result in a black texture.
 
-- **Automatic monitor detection**: Detects all connected monitors automatically
-- **Dynamic monitor switching**: Captures from the appropriate monitor based on blur window position
-- **DPI awareness**: Considers DPI scaling for each monitor
+2.  **Windows Graphics Capture (WGC)**:
+    *   Available on Windows 10 Version 1803 (April 2018 Update) and later.
+    *   **Benefit**: Fully supports cross-GPU capture. Windows can be blurred correctly regardless of which monitor they are on.
 
-### Limitations (Desktop Duplication API)
+### Auto Mode
 
-> ⚠️ **Important**: The current capture method (Desktop Duplication API) **does not support blur across different GPUs (adapters)**.
+By default (`Auto`), the library operates with the following logic:
 
-| Configuration | Support Status |
-|---------------|----------------|
-| Multiple monitors on the same GPU | ✅ Supported |
-| Monitors distributed across different GPUs (integrated + discrete, etc.) | ❌ Primary GPU monitors only |
+*   **If WGC is available**: It prioritizes using WGC. This ensures blur works regardless of your GPU configuration.
+*   **If WGC is unavailable**: It automatically falls back to DXGI for older Windows environments.
 
-**Examples**: 
-- Main monitor (integrated GPU) + Sub monitor (integrated GPU) → ✅ Both can be blurred
-- Main monitor (integrated GPU) + Sub monitor (NVIDIA GPU) → ❌ Main monitor only
+### Control via C API
 
-### Future Plans
+You can explicitly set the capture method using the `blur_set_capture_method` function.
 
-Cross-GPU blur support is planned through Windows Graphics Capture API integration.
-
+```c
+// 0=Auto, 1=DXGI, 2=WGC
+blur_set_capture_method(window, 2); 
+```
