@@ -26,19 +26,29 @@ extern "C" {
 }
 
 WGCCapture::WGCCapture() {
+    LOG_INFO("WGCCapture constructor called");
     // Initialize WinRT (only once per process)
-    EnsureWinRTInitialized();
+    try {
+        EnsureWinRTInitialized();
+        LOG_INFO("WGCCapture WinRT initialized");
+    } catch (...) {
+        LOG_ERROR("WGCCapture WinRT initialization failed");
+    }
 }
 
 WGCCapture::~WGCCapture() {
+    LOG_INFO("WGCCapture destructor called");
     Shutdown();
 }
 
 bool WGCCapture::IsAvailable() {
     // Windows Graphics Capture is available on Windows 10 1803 (build 17134) and later
     try {
-        return winrt::Windows::Graphics::Capture::GraphicsCaptureSession::IsSupported();
+        bool supported = winrt::Windows::Graphics::Capture::GraphicsCaptureSession::IsSupported();
+        // LOG_INFO("WGCCapture::IsAvailable: %d", supported);
+        return supported;
     } catch (...) {
+        LOG_ERROR("WGCCapture::IsAvailable exception");
         return false;
     }
 }
@@ -405,7 +415,15 @@ std::unique_ptr<ICaptureSubsystem> CreateWGCCapture() {
 
 // Check if WGC is available (exported for SubsystemFactory)
 bool IsWGCAvailable() {
-    return WGCCapture::IsAvailable();
+    LOG_INFO("IsWGCAvailable called");
+    try {
+        bool result = WGCCapture::IsAvailable();
+        LOG_INFO("IsWGCAvailable result: %d", result);
+        return result;
+    } catch (...) {
+        LOG_ERROR("IsWGCAvailable crashed");
+        return false;
+    }
 }
 
 } // namespace blurwindow
