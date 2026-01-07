@@ -359,10 +359,10 @@ private:
         LOG_INFO("Initializing subsystems...");
 
         // 1. Initialize capture
-        m_capture = SubsystemFactory::CreateCapture(CaptureType::DXGI);
+        m_capture = SubsystemFactory::CreateCapture(CaptureType::Auto);
         if (m_capture) {
             if (!m_capture->Initialize(m_device)) {
-                LOG_ERROR("Failed to initialize DXGI capture.");
+                LOG_ERROR("Failed to initialize capture subsystem.");
                 m_capture.reset();
             } else {
                 m_capture->SetSelfWindow(m_hwnd);
