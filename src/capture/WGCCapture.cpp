@@ -5,11 +5,20 @@
 #include <inspectable.h>
 #include <dxgi.h>
 #include <shellscalingapi.h>
+#include <mutex>
 
 #pragma comment(lib, "windowsapp.lib")
 #pragma comment(lib, "shcore.lib")
 
 namespace blurwindow {
+
+// WinRT apartment initialization (singleton pattern)
+static std::once_flag s_winrtInitFlag;
+static void EnsureWinRTInitialized() {
+    std::call_once(s_winrtInitFlag, []() {
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    });
+}
 
 // Helper to convert ID3D11Device to WinRT IDirect3DDevice
 extern "C" {
@@ -17,8 +26,8 @@ extern "C" {
 }
 
 WGCCapture::WGCCapture() {
-    // Initialize WinRT
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    // Initialize WinRT (only once per process)
+    EnsureWinRTInitialized();
 }
 
 WGCCapture::~WGCCapture() {
@@ -100,7 +109,7 @@ bool WGCCapture::Initialize(ID3D11Device* device) {
     return true;
 }
 
-static BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+static BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC /*hdcMonitor*/, LPRECT /*lprcMonitor*/, LPARAM dwData) {
     auto* monitors = reinterpret_cast<std::vector<WGCMonitorInfo>*>(dwData);
     
     MONITORINFOEXW mi = {};
@@ -198,11 +207,11 @@ bool WGCCapture::InitializeCaptureForMonitor(int monitorIndex) {
 
         LOG_INFO("WGCCapture: Created capture item for monitor %d (%dx%d)", monitorIndex, m_frameWidth, m_frameHeight);
 
-        // Create frame pool
+        // Create frame pool (2 frames for better buffering)
         m_framePool = winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool::CreateFreeThreaded(
             m_winrtDevice,
             winrt::Windows::Graphics::DirectX::DirectXPixelFormat::B8G8R8A8UIntNormalized,
-            1,  // Number of frames
+            2,  // Number of frames (increased from 1 for better latency)
             size);
 
         // Subscribe to frame arrived event
@@ -226,7 +235,7 @@ bool WGCCapture::InitializeCaptureForMonitor(int monitorIndex) {
 
 void WGCCapture::OnFrameArrived(
     winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool const& sender,
-    winrt::Windows::Foundation::IInspectable const& args) {
+    winrt::Windows::Foundation::IInspectable const& /*args*/) {
     
     try {
         auto frame = sender.TryGetNextFrame();
@@ -314,7 +323,16 @@ bool WGCCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** outTexture) 
     }
 
     // Create or resize cached texture
-    if (!m_cachedTexture) {
+    D3D11_TEXTURE2D_DESC existingDesc = {};
+    if (m_cachedTexture) {
+        m_cachedTexture->GetDesc(&existingDesc);
+    }
+    
+    bool needsRecreate = !m_cachedTexture || 
+        existingDesc.Width != static_cast<UINT>(regionWidth) || 
+        existingDesc.Height != static_cast<UINT>(regionHeight);
+    
+    if (needsRecreate) {
         D3D11_TEXTURE2D_DESC desc = {};
         desc.Width = regionWidth;
         desc.Height = regionHeight;
@@ -326,7 +344,10 @@ bool WGCCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** outTexture) 
         desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
         HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, m_cachedTexture.ReleaseAndGetAddressOf());
-        if (FAILED(hr)) return false;
+        if (FAILED(hr)) {
+            LOG_ERROR("WGCCapture: Failed to create cached texture (0x%08X)", hr);
+            return false;
+        }
     }
 
     // Copy region
