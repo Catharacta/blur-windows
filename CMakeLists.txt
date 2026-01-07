@@ -35,6 +35,7 @@ set(WINDOWS_LIBS
     dwmapi
     d3dcompiler
     winmm
+    windowsapp  # For Windows Graphics Capture API (WinRT)
 )
 
 # Include directories
@@ -52,6 +53,7 @@ set(CORE_SOURCES
 # Source files - Capture
 set(CAPTURE_SOURCES
     src/capture/DXGICapture.cpp
+    src/capture/WGCCapture.cpp  # Windows Graphics Capture API
 )
 
 # Source files - Effects
