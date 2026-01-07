@@ -108,6 +108,10 @@ public:
     /// @param enable true to enable always-on-top
     void SetTopMost(bool enable);
 
+    /// Set capture method
+    /// @param type Capture method (Auto, DXGI, WGC)
+    void SetCaptureMethod(CaptureType type);
+
     /// Update window bounds
     /// @param bounds New bounds (screen coordinates)
     void SetBounds(const RECT& bounds);

@@ -54,3 +54,34 @@ The release package (ZIP) includes the following files:
 ### Unresolved symbol (LNK2019) error
 - Verify that `blurwindow.lib` is correctly linked and the library path is set.
 - When using the C API from C++, ensure it's wrapped with `extern "C"` (`c_api.h` handles this automatically).
+
+---
+
+## Multi-Monitor Support
+## Multi-monitor Support and Capture Methods
+
+Since version 0.1.0, BlurWindow supports two capture methods:
+
+1.  **DXGI Desktop Duplication API**:
+    *   Available on Windows 8 and later.
+    *   **Limitation**: Capture between monitors connected to different GPUs is NOT supported (e.g., hybrid graphics setups with iGPU and dGPU). Attempting to blur a window on a different GPU will result in a black texture.
+
+2.  **Windows Graphics Capture (WGC)**:
+    *   Available on Windows 10 Version 1803 (April 2018 Update) and later.
+    *   **Benefit**: Fully supports cross-GPU capture. Windows can be blurred correctly regardless of which monitor they are on.
+
+### Auto Mode
+
+By default (`Auto`), the library operates with the following logic:
+
+*   **If WGC is available**: It prioritizes using WGC. This ensures blur works regardless of your GPU configuration.
+*   **If WGC is unavailable**: It automatically falls back to DXGI for older Windows environments.
+
+### Control via C API
+
+You can explicitly set the capture method using the `blur_set_capture_method` function.
+
+```c
+// 0=Auto, 1=DXGI, 2=WGC
+blur_set_capture_method(window, 2); 
+```

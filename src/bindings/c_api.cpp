@@ -17,6 +17,7 @@ BLURWINDOW_API BlurSystemHandle blur_init(const BlurSystemOptionsC* opts) {
         options.enableLogging = (opts->enableLogging != 0);
         options.logPath = opts->logPath;
         options.defaultPreset = static_cast<QualityPreset>(opts->defaultPreset);
+        options.captureMethod = static_cast<CaptureType>(opts->captureMethod);
     }
 
     if (!BlurSystem::Instance().Initialize(options)) {
@@ -112,6 +113,13 @@ BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const Blur
     auto* w = reinterpret_cast<BlurWindow*>(window);
     RECT r = {bounds->left, bounds->top, bounds->right, bounds->bottom};
     w->SetBounds(r);
+    return BLUR_OK;
+}
+
+BLURWINDOW_API BlurErrorCode blur_set_capture_method(BlurWindowHandle window, BlurCaptureMethod method) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->SetCaptureMethod(static_cast<CaptureType>(method));
     return BLUR_OK;
 }
 
