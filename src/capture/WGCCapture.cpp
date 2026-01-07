@@ -190,6 +190,10 @@ bool WGCCapture::InitializeCaptureForMonitor(int monitorIndex) {
         m_framePool = nullptr;
     }
     m_captureItem = nullptr;
+    
+    // Reset latest frame to avoid showing stall frame from previous monitor
+    m_latestFrame.store(nullptr);
+    m_latestFrameHolder.Reset();
 
     try {
         // Get GraphicsCaptureItem from HMONITOR using interop
@@ -251,7 +255,14 @@ void WGCCapture::OnFrameArrived(
         auto frame = sender.TryGetNextFrame();
         if (!frame) return;
 
+        // Log first frame arrival for this session
+        static int frameCount = 0;
+        if (frameCount++ % 60 == 0) {
+           LOG_DEBUG("WGCCapture: Frame arrived"); 
+        }
+
         auto surface = frame.Surface();
+        // ... (rest of the function)
         
         // Get D3D11 texture from WinRT surface
         auto access = surface.as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
