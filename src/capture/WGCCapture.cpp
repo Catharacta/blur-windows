@@ -256,10 +256,10 @@ void WGCCapture::OnFrameArrived(
         if (!frame) return;
 
         // Log first frame arrival for this session
-        static int frameCount = 0;
-        if (frameCount++ % 60 == 0) {
-           LOG_DEBUG("WGCCapture: Frame arrived"); 
-        }
+        // static int frameCount = 0;
+        // if (frameCount++ % 60 == 0) {
+        //    LOG_DEBUG("WGCCapture: Frame arrived"); 
+        // }
 
         auto surface = frame.Surface();
         // ... (rest of the function)
