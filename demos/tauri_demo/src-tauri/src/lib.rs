@@ -64,7 +64,11 @@ unsafe impl Send for BlurState {}
 unsafe impl Sync for BlurState {}
 
 #[tauri::command]
-fn start_blur(state: tauri::State<'_, BlurState>, effect_type: Option<i32>) -> Result<(), String> {
+fn start_blur(
+    state: tauri::State<'_, BlurState>,
+    effect_type: Option<i32>,
+    bounds: Option<(i32, i32, i32, i32)>,
+) -> Result<(), String> {
     let mut sys_lock = state.sys.lock().unwrap();
     let mut window_lock = state.window.lock().unwrap();
 
@@ -74,9 +78,11 @@ fn start_blur(state: tauri::State<'_, BlurState>, effect_type: Option<i32>) -> R
 
     unsafe {
         if sys_lock.is_none() {
+            // Create log file path
+            let log_path = std::ffi::CString::new("blurwindow.log").unwrap();
             let sys_opts = BlurSystemOptionsC {
                 enable_logging: 1,
-                log_path: std::ptr::null(),
+                log_path: log_path.as_ptr(),
                 default_preset: 0,
             };
             let sys = blur_init(&sys_opts);
@@ -87,13 +93,17 @@ fn start_blur(state: tauri::State<'_, BlurState>, effect_type: Option<i32>) -> R
         }
 
         let sys = sys_lock.unwrap();
+
+        // Use provided bounds or default
+        let (left, top, right, bottom) = bounds.unwrap_or((100, 100, 600, 500));
+
         let opts = BlurWindowOptionsC {
             owner: std::ptr::null_mut(),
             bounds: BlurRect {
-                left: 100,
-                top: 100,
-                right: 600,
-                bottom: 500,
+                left,
+                top,
+                right,
+                bottom,
             },
             top_most: 1,
             click_through: 0,

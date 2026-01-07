@@ -10,13 +10,35 @@ function appendLog(msg) {
   logContainer.prepend(entry);
 }
 
+function getBoundsFromMonitorSelection() {
+  const monitorSelect = document.getElementById("select-monitor").value;
+
+  switch (monitorSelect) {
+    case "main":
+      return [100, 100, 600, 500];
+    case "sub-right":
+      return [2020, 100, 2520, 500];
+    case "sub-left":
+      return [-2460, 100, -1960, 500];
+    case "custom":
+      const left = parseInt(document.getElementById("bounds-left").value) || 100;
+      const top = parseInt(document.getElementById("bounds-top").value) || 100;
+      const width = parseInt(document.getElementById("bounds-width").value) || 500;
+      const height = parseInt(document.getElementById("bounds-height").value) || 400;
+      return [left, top, left + width, top + height];
+    default:
+      return [100, 100, 600, 500];
+  }
+}
+
 async function startBlur() {
   try {
     const effectType = parseInt(document.getElementById("select-effect").value);
-    await invoke("start_blur", { effectType });
+    const bounds = getBoundsFromMonitorSelection();
+    await invoke("start_blur", { effectType, bounds });
     document.body.classList.add("running");
     statusText.textContent = "Running";
-    appendLog(`Blur started (Effect: ${effectType}).`);
+    appendLog(`Blur started (Effect: ${effectType}, Bounds: ${bounds.join(",")}).`);
   } catch (e) {
     appendLog(`Error: ${e}`);
   }
@@ -83,7 +105,7 @@ async function updateRainParams() {
 function toggleRainSection() {
   const effectType = parseInt(document.getElementById("select-effect").value);
   const rainSection = document.getElementById("rain-section");
-  rainSection.style.display = (effectType === 4) ? "block" : "none";
+  rainSection.style.display = (effectType === 6) ? "block" : "none";
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -94,6 +116,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btn-start").addEventListener("click", startBlur);
   document.getElementById("btn-stop").addEventListener("click", stopBlur);
+
+  // Monitor selection - toggle custom bounds visibility
+  document.getElementById("select-monitor").addEventListener("change", (e) => {
+    const customBounds = document.getElementById("custom-bounds");
+    customBounds.style.display = (e.target.value === "custom") ? "block" : "none";
+  });
 
   const blurInputs = ["select-effect", "slider-strength", "slider-param", "color-tint", "slider-alpha"];
   blurInputs.forEach(id => {

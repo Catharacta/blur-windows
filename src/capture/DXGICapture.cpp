@@ -16,9 +16,19 @@ namespace blurwindow {
 /// Monitor information for multi-monitor support
 struct MonitorInfo {
     ComPtr<IDXGIOutput> output;
-    RECT bounds;          // Physical coordinates
-    UINT dpi;             // DPI scale
+    ComPtr<IDXGIAdapter> adapter;  // Adapter this monitor belongs to
+    int adapterIndex;              // Index of the adapter
+    RECT bounds;                   // Physical coordinates
+    UINT dpi;                      // DPI scale
     bool isPrimary;
+};
+
+/// Adapter information with its D3D device
+struct AdapterInfo {
+    ComPtr<IDXGIAdapter> adapter;
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    int index;
 };
 
 class DXGICapture : public ICaptureSubsystem {
@@ -29,32 +39,40 @@ public:
     bool Initialize(ID3D11Device* device) override {
         if (!device) return false;
         
-        m_device = device;
-        m_device->GetImmediateContext(m_context.GetAddressOf());
+        m_primaryDevice = device;
+        m_primaryDevice->GetImmediateContext(m_primaryContext.GetAddressOf());
 
-        LOG_INFO("Initializing DXGI capture...");
+        LOG_INFO("Initializing DXGI capture (multi-adapter mode)...");
 
-        // Get DXGI device
+        // Get DXGI Factory to enumerate all adapters
         ComPtr<IDXGIDevice> dxgiDevice;
-        HRESULT hr = m_device->QueryInterface(IID_PPV_ARGS(dxgiDevice.GetAddressOf()));
+        HRESULT hr = m_primaryDevice->QueryInterface(IID_PPV_ARGS(dxgiDevice.GetAddressOf()));
         if (FAILED(hr)) {
             LOG_ERROR("Failed to query IDXGIDevice from D3D11 device (0x%08X).", hr);
             return false;
         }
 
-        // Get adapter
-        hr = dxgiDevice->GetAdapter(m_adapter.GetAddressOf());
+        // Get adapter of primary device
+        ComPtr<IDXGIAdapter> primaryAdapter;
+        hr = dxgiDevice->GetAdapter(primaryAdapter.GetAddressOf());
         if (FAILED(hr)) {
             LOG_ERROR("Failed to get adapter from DXGI device (0x%08X).", hr);
             return false;
         }
 
-        // Enumerate all outputs (monitors)
-        EnumerateMonitors();
+        // Get factory from adapter
+        hr = primaryAdapter->GetParent(IID_PPV_ARGS(m_factory.GetAddressOf()));
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to get DXGI factory (0x%08X).", hr);
+            return false;
+        }
+
+        // Enumerate all adapters and their monitors
+        EnumerateAllAdaptersAndMonitors(primaryAdapter.Get());
 
         // Initialize duplication for primary monitor first
         if (!m_monitors.empty()) {
-            LOG_INFO("Primary monitor found. Initializing duplication...");
+            LOG_INFO("Found %zu monitors across all adapters. Initializing duplication...", m_monitors.size());
             return InitializeDuplicationForMonitor(0);
         }
 
@@ -132,6 +150,7 @@ public:
         }
 
         // Create or recreate output texture if needed
+        // Note: We create texture on the primary device for compatibility with BlurWindow
         if (!m_cachedTexture || NeedsResize(regionWidth, regionHeight)) {
             D3D11_TEXTURE2D_DESC desc = {};
             desc.Width = regionWidth;
@@ -143,7 +162,7 @@ public:
             desc.Usage = D3D11_USAGE_DEFAULT;
             desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
-            hr = m_device->CreateTexture2D(&desc, nullptr, m_cachedTexture.ReleaseAndGetAddressOf());
+            hr = m_primaryDevice->CreateTexture2D(&desc, nullptr, m_cachedTexture.ReleaseAndGetAddressOf());
             if (FAILED(hr)) return false;
 
             m_cachedWidth = regionWidth;
@@ -155,21 +174,36 @@ public:
         const MonitorInfo& monInfo = m_monitors[m_currentMonitorIndex];
         
         // Convert physical screen coordinates to monitor-relative coordinates
-        srcBox.left = (std::max)(0L, physicalRegion.left - monInfo.bounds.left);
-        srcBox.top = (std::max)(0L, physicalRegion.top - monInfo.bounds.top);
-        srcBox.right = (std::min)((LONG)m_outputWidth, physicalRegion.right - monInfo.bounds.left);
-        srcBox.bottom = (std::min)((LONG)m_outputHeight, physicalRegion.bottom - monInfo.bounds.top);
+        LONG relLeft = physicalRegion.left - monInfo.bounds.left;
+        LONG relTop = physicalRegion.top - monInfo.bounds.top;
+        LONG relRight = physicalRegion.right - monInfo.bounds.left;
+        LONG relBottom = physicalRegion.bottom - monInfo.bounds.top;
+        
+        // Check if region is completely outside the current monitor
+        if (relRight <= 0 || relBottom <= 0 || 
+            relLeft >= (LONG)m_outputWidth || relTop >= (LONG)m_outputHeight) {
+            LOG_WARN("CaptureFrame: Region (%d,%d,%d,%d) is outside current monitor bounds (%d,%d,%d,%d)",
+                physicalRegion.left, physicalRegion.top, physicalRegion.right, physicalRegion.bottom,
+                monInfo.bounds.left, monInfo.bounds.top, monInfo.bounds.right, monInfo.bounds.bottom);
+            // Return cached texture if available (show last good frame)
+            if (m_cachedTexture) {
+                *outTexture = m_cachedTexture.Get();
+                return true;
+            }
+            return false;
+        }
+        
+        // Clamp to valid range (all values are now guaranteed non-negative for in-bounds region)
+        srcBox.left = (UINT)(std::max)(0L, relLeft);
+        srcBox.top = (UINT)(std::max)(0L, relTop);
+        srcBox.right = (UINT)(std::min)((LONG)m_outputWidth, relRight);
+        srcBox.bottom = (UINT)(std::min)((LONG)m_outputHeight, relBottom);
         srcBox.front = 0;
         srcBox.back = 1;
 
-        // Clamp to valid range
-        srcBox.left = (std::max)(0U, (UINT)srcBox.left);
-        srcBox.top = (std::max)(0U, (UINT)srcBox.top);
-        srcBox.right = (std::min)(m_outputWidth, (UINT)srcBox.right);
-        srcBox.bottom = (std::min)(m_outputHeight, (UINT)srcBox.bottom);
-
         // Copy region from desktop texture
-        m_context->CopySubresourceRegion(
+        // Use primary context since we only capture from primary adapter
+        m_primaryContext->CopySubresourceRegion(
             m_cachedTexture.Get(), 0,
             0, 0, 0,
             desktopTexture.Get(), 0,
@@ -188,10 +222,12 @@ public:
         
         m_cachedTexture.Reset();
         m_duplication.Reset();
-        m_context.Reset();
-        m_adapter.Reset();
+        m_primaryContext.Reset();
+        m_factory.Reset();
+        m_adapters.clear();
         m_monitors.clear();
-        m_device = nullptr;
+        m_primaryDevice = nullptr;
+        m_currentDevice = nullptr;
         m_initialized = false;
     }
 
@@ -200,29 +236,100 @@ public:
     }
 
 private:
-    void EnumerateMonitors() {
+    void EnumerateAllAdaptersAndMonitors(IDXGIAdapter* primaryAdapter) {
         m_monitors.clear();
+        m_adapters.clear();
         
-        ComPtr<IDXGIOutput> output;
-        for (UINT i = 0; m_adapter->EnumOutputs(i, output.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; i++) {
-            DXGI_OUTPUT_DESC desc;
-            output->GetDesc(&desc);
+        LOG_INFO("EnumerateAllAdaptersAndMonitors: Starting multi-adapter enumeration...");
+        
+        // Enumerate all adapters
+        ComPtr<IDXGIAdapter> adapter;
+        for (UINT adapterIdx = 0; m_factory->EnumAdapters(adapterIdx, adapter.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; adapterIdx++) {
+            DXGI_ADAPTER_DESC adapterDesc;
+            adapter->GetDesc(&adapterDesc);
             
-            MonitorInfo info;
-            info.output = output;
-            info.bounds = desc.DesktopCoordinates;
-            info.isPrimary = (i == 0);
+            // Convert adapter description to narrow string for logging
+            char adapterName[128];
+            WideCharToMultiByte(CP_UTF8, 0, adapterDesc.Description, -1, adapterName, sizeof(adapterName), nullptr, nullptr);
+            LOG_INFO("Adapter[%u]: %s", adapterIdx, adapterName);
             
-            // Get DPI for this monitor
-            UINT dpiX, dpiY;
-            if (SUCCEEDED(GetDpiForMonitor(desc.Monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
-                info.dpi = dpiX;
+            // Check if this is the primary adapter (same as the one used by the main D3D device)
+            bool isPrimaryAdapter = (adapter.Get() == primaryAdapter);
+            
+            // Create D3D device for this adapter (needed for Desktop Duplication)
+            AdapterInfo adapterInfo;
+            adapterInfo.adapter = adapter;
+            adapterInfo.index = adapterIdx;
+            
+            if (isPrimaryAdapter) {
+                // Reuse the primary device
+                adapterInfo.device = m_primaryDevice;
+                adapterInfo.context = m_primaryContext;
+                m_primaryAdapterIndex = adapterIdx;
+                LOG_INFO("  -> Primary adapter (index %u), reusing existing D3D device", adapterIdx);
             } else {
-                info.dpi = 96;  // Default DPI
+                // Create new D3D device for this adapter
+                D3D_FEATURE_LEVEL featureLevel;
+                UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+                #ifdef _DEBUG
+                flags |= D3D11_CREATE_DEVICE_DEBUG;
+                #endif
+                
+                HRESULT hr = D3D11CreateDevice(
+                    adapter.Get(),
+                    D3D_DRIVER_TYPE_UNKNOWN,  // Must use UNKNOWN when specifying adapter
+                    nullptr,
+                    flags,
+                    nullptr, 0,
+                    D3D11_SDK_VERSION,
+                    adapterInfo.device.GetAddressOf(),
+                    &featureLevel,
+                    adapterInfo.context.GetAddressOf()
+                );
+                
+                if (FAILED(hr)) {
+                    LOG_WARN("  -> Failed to create D3D device for adapter %u (0x%08X), skipping", adapterIdx, hr);
+                    continue;
+                }
+                LOG_INFO("  -> Created D3D device for secondary adapter");
             }
             
-            m_monitors.push_back(std::move(info));
+            m_adapters.push_back(adapterInfo);
+            
+            // Enumerate outputs (monitors) for this adapter
+            ComPtr<IDXGIOutput> output;
+            for (UINT outputIdx = 0; adapter->EnumOutputs(outputIdx, output.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; outputIdx++) {
+                DXGI_OUTPUT_DESC desc;
+                output->GetDesc(&desc);
+                
+                MonitorInfo info;
+                info.output = output;
+                info.adapter = adapter;
+                info.adapterIndex = adapterIdx;
+                info.bounds = desc.DesktopCoordinates;
+                info.isPrimary = (adapterIdx == 0 && outputIdx == 0);
+                
+                // Get DPI for this monitor
+                UINT dpiX, dpiY;
+                if (SUCCEEDED(GetDpiForMonitor(desc.Monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
+                    info.dpi = dpiX;
+                } else {
+                    info.dpi = 96;  // Default DPI
+                }
+                
+                size_t monitorGlobalIndex = m_monitors.size();
+                LOG_INFO("Monitor[%zu]: adapter=%u, bounds=(%d,%d,%d,%d), dpi=%u, primary=%d",
+                    monitorGlobalIndex, adapterIdx,
+                    info.bounds.left, info.bounds.top, 
+                    info.bounds.right, info.bounds.bottom,
+                    info.dpi, info.isPrimary ? 1 : 0);
+                
+                m_monitors.push_back(std::move(info));
+            }
         }
+        
+        LOG_INFO("EnumerateAllAdaptersAndMonitors: Found %zu monitors across %zu adapters.",
+            m_monitors.size(), m_adapters.size());
     }
 
     int FindMonitorForRegion(const RECT& region) const {
@@ -234,34 +341,69 @@ private:
             const RECT& bounds = m_monitors[i].bounds;
             if (centerX >= bounds.left && centerX < bounds.right &&
                 centerY >= bounds.top && centerY < bounds.bottom) {
+                LOG_DEBUG("FindMonitorForRegion: region=(%d,%d,%d,%d) center=(%d,%d) -> monitor %d",
+                    region.left, region.top, region.right, region.bottom,
+                    centerX, centerY, static_cast<int>(i));
                 return static_cast<int>(i);
             }
         }
         
         // Default to primary monitor
+        LOG_WARN("FindMonitorForRegion: region=(%d,%d,%d,%d) center=(%d,%d) not found, defaulting to monitor 0",
+            region.left, region.top, region.right, region.bottom, centerX, centerY);
         return 0;
     }
 
     bool InitializeDuplicationForMonitor(int monitorIndex) {
+        LOG_DEBUG("InitializeDuplicationForMonitor: Attempting to initialize for monitor %d", monitorIndex);
+        
         if (monitorIndex < 0 || monitorIndex >= static_cast<int>(m_monitors.size())) {
+            LOG_ERROR("InitializeDuplicationForMonitor: Invalid monitor index %d (total monitors: %zu)",
+                monitorIndex, m_monitors.size());
             return false;
         }
 
-        // Release existing duplication
+        // Find the adapter info for this monitor BEFORE releasing existing duplication
+        const MonitorInfo& monInfo = m_monitors[monitorIndex];
+        
+        // Check if this monitor is on the primary adapter
+        // Cross-adapter texture copy is not supported, so we can only capture from primary adapter
+        if (monInfo.adapterIndex != m_primaryAdapterIndex) {
+            LOG_WARN("InitializeDuplicationForMonitor: Monitor %d is on adapter %d, but primary adapter is %d. "
+                "Cross-adapter capture not supported. Bounds: (%d,%d,%d,%d). Keeping current monitor.",
+                monitorIndex, monInfo.adapterIndex, m_primaryAdapterIndex,
+                monInfo.bounds.left, monInfo.bounds.top, monInfo.bounds.right, monInfo.bounds.bottom);
+            // Do NOT reset existing duplication - keep current monitor working
+            return false;
+        }
+
+        // Release existing duplication (only after we know we can switch)
         if (m_frameAcquired && m_duplication) {
             m_duplication->ReleaseFrame();
             m_frameAcquired = false;
         }
         m_duplication.Reset();
+        
+        ID3D11Device* deviceForMonitor = m_primaryDevice;
 
         // Get Output1 for duplication
         ComPtr<IDXGIOutput1> output1;
-        HRESULT hr = m_monitors[monitorIndex].output.As(&output1);
-        if (FAILED(hr)) return false;
-
-        // Create desktop duplication
-        hr = output1->DuplicateOutput(m_device, m_duplication.GetAddressOf());
+        HRESULT hr = monInfo.output.As(&output1);
         if (FAILED(hr)) {
+            LOG_ERROR("InitializeDuplicationForMonitor: Failed to get IDXGIOutput1 for monitor %d (0x%08X)",
+                monitorIndex, hr);
+            return false;
+        }
+
+        // Create desktop duplication using the correct device for this adapter
+        hr = output1->DuplicateOutput(deviceForMonitor, m_duplication.GetAddressOf());
+        if (FAILED(hr)) {
+            LOG_ERROR("InitializeDuplicationForMonitor: DuplicateOutput FAILED for monitor %d (adapter %d) (0x%08X)",
+                monitorIndex, monInfo.adapterIndex, hr);
+            // Common error codes:
+            // E_ACCESSDENIED (0x80070005): Another app has exclusive access
+            // DXGI_ERROR_NOT_CURRENTLY_AVAILABLE (0x887A0022): Desktop duplication not available
+            // DXGI_ERROR_UNSUPPORTED (0x887A0004): Unsupported operation
             return false;
         }
 
@@ -272,7 +414,13 @@ private:
         m_outputHeight = duplDesc.ModeDesc.Height;
 
         m_currentMonitorIndex = monitorIndex;
+        m_currentDevice = deviceForMonitor;
         m_initialized = true;
+        
+        const RECT& bounds = monInfo.bounds;
+        LOG_INFO("InitializeDuplicationForMonitor: SUCCESS monitor %d (adapter %d), output %ux%u, bounds=(%d,%d,%d,%d)",
+            monitorIndex, monInfo.adapterIndex, m_outputWidth, m_outputHeight,
+            bounds.left, bounds.top, bounds.right, bounds.bottom);
         return true;
     }
 
@@ -291,14 +439,25 @@ private:
         return m_cachedWidth != width || m_cachedHeight != height;
     }
 
-    ID3D11Device* m_device = nullptr;
-    ComPtr<ID3D11DeviceContext> m_context;
-    ComPtr<IDXGIAdapter> m_adapter;
+    // Primary device (passed from BlurWindow)
+    ID3D11Device* m_primaryDevice = nullptr;
+    ComPtr<ID3D11DeviceContext> m_primaryContext;
+    
+    // Current device used for duplication (may differ per monitor)
+    ID3D11Device* m_currentDevice = nullptr;
+    
+    // Factory for enumerating all adapters
+    ComPtr<IDXGIFactory> m_factory;
+    
+    // All adapters with their D3D devices
+    std::vector<AdapterInfo> m_adapters;
+    
     ComPtr<IDXGIOutputDuplication> m_duplication;
     ComPtr<ID3D11Texture2D> m_cachedTexture;
 
     std::vector<MonitorInfo> m_monitors;
     int m_currentMonitorIndex = 0;
+    int m_primaryAdapterIndex = 0;  // Index of the primary adapter
 
     bool m_initialized = false;
     bool m_frameAcquired = false;

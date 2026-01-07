@@ -25,7 +25,38 @@
     <main>
       <div class="section">
         <h3>Controls</h3>
-        <div class="button-group">
+        <div class="control-grid">
+          <div class="control-item">
+            <label>Target Monitor</label>
+            <select id="select-monitor">
+              <option value="main">Main (100,100 - 600x400)</option>
+              <option value="sub-right">Sub Right (2020,100 - 500x400)</option>
+              <option value="sub-left">Sub Left (-2460,100 - 500x400)</option>
+              <option value="custom">Custom...</option>
+            </select>
+          </div>
+        </div>
+        <div id="custom-bounds" style="display:none; margin-top: 10px;">
+          <div class="control-grid">
+            <div class="control-item">
+              <label>Left</label>
+              <input type="number" id="bounds-left" value="100">
+            </div>
+            <div class="control-item">
+              <label>Top</label>
+              <input type="number" id="bounds-top" value="100">
+            </div>
+            <div class="control-item">
+              <label>Width</label>
+              <input type="number" id="bounds-width" value="500">
+            </div>
+            <div class="control-item">
+              <label>Height</label>
+              <input type="number" id="bounds-height" value="400">
+            </div>
+          </div>
+        </div>
+        <div class="button-group" style="margin-top: 10px;">
           <button id="btn-start" class="btn-primary">Start Blur</button>
           <button id="btn-stop" class="btn-secondary">Stop Blur</button>
         </div>
@@ -38,10 +69,12 @@
             <label>Effect Type</label>
             <select id="select-effect">
               <option value="0">Gaussian</option>
-              <option value="1">Kawase</option>
-              <option value="2">Box</option>
+              <option value="1">Box</option>
+              <option value="2">Kawase</option>
               <option value="3">Radial</option>
-              <option value="4">Rain</option>
+              <option value="4">Glass</option>
+              <option value="5">Frosted Glass</option>
+              <option value="6">Rain</option>
             </select>
           </div>
 

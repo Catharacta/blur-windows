@@ -541,6 +541,17 @@ private:
         // This prevents infinite recursion where the blur window captures itself
         if (m_hwnd) {
             SetWindowDisplayAffinity(m_hwnd, WDA_EXCLUDEFROMCAPTURE);
+            
+            // Log window creation details for multi-monitor debugging
+            RECT actualRect;
+            GetWindowRect(m_hwnd, &actualRect);
+            LOG_INFO("CreateBlurWindow: hwnd=%p, requested=(%d,%d,%d,%d), actual=(%d,%d,%d,%d)",
+                m_hwnd,
+                m_options.bounds.left, m_options.bounds.top,
+                m_options.bounds.right, m_options.bounds.bottom,
+                actualRect.left, actualRect.top, actualRect.right, actualRect.bottom);
+        } else {
+            LOG_ERROR("CreateBlurWindow: CreateWindowExW FAILED, GetLastError=%u", GetLastError());
         }
     }
 
