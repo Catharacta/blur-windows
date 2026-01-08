@@ -377,13 +377,47 @@ public:
 
 private:
     bool InitializeGraphicsBasics() {
-        m_device = BlurSystem::Instance().GetDevice();
-        if (!m_device) {
-            LOG_ERROR("D3D11 Device not available from BlurSystem.");
+        // Create independent D3D11 Device & Context for this window to prevent threading conflicts
+        D3D_FEATURE_LEVEL featureLevels[] = {
+            D3D_FEATURE_LEVEL_11_1,
+            D3D_FEATURE_LEVEL_11_0,
+        };
+        UINT createFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#ifdef _DEBUG
+        createFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+        D3D_FEATURE_LEVEL featureLevel;
+        HRESULT hr = D3D11CreateDevice(
+            nullptr,                    // Adapter (Default)
+            D3D_DRIVER_TYPE_HARDWARE,
+            nullptr,                    // No software rasterizer
+            createFlags,
+            featureLevels, ARRAYSIZE(featureLevels),
+            D3D11_SDK_VERSION,
+            m_device.ReleaseAndGetAddressOf(),
+            &featureLevel,
+            m_context.ReleaseAndGetAddressOf()
+        );
+
+        if (FAILED(hr)) {
+            // Retry without debug layer if it failed
+            createFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
+            hr = D3D11CreateDevice(
+                nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createFlags,
+                featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+                m_device.ReleaseAndGetAddressOf(),
+                &featureLevel,
+                m_context.ReleaseAndGetAddressOf()
+            );
+        }
+
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to create independent D3D11 device: 0x%08X", hr);
             return false;
         }
-        m_context.Reset();
-        m_device->GetImmediateContext(m_context.GetAddressOf());
+        
+        LOG_INFO("Created independent D3D11 Device (%p) & Context (%p)", m_device.Get(), m_context.Get());
         
         m_width = m_options.bounds.right - m_options.bounds.left;
         m_height = m_options.bounds.bottom - m_options.bounds.top;
