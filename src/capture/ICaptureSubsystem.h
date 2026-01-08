@@ -29,6 +29,15 @@ public:
     /// Set self window handle for self-capture avoidance
     /// @param hwnd Self window handle
     virtual void SetSelfWindow(HWND hwnd) = 0;
+
+    /// Set target bounds and lock to the corresponding monitor
+    /// Once locked, CaptureFrame will not switch to a different monitor
+    /// @param bounds Target region bounds (used to determine target monitor)
+    virtual void SetTargetBounds(const RECT& bounds) = 0;
+
+    /// Check if target monitor is locked
+    /// @return true if target is locked
+    virtual bool IsTargetLocked() const = 0;
 };
 
 } // namespace blurwindow

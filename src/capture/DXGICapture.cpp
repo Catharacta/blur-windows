@@ -83,13 +83,15 @@ public:
     bool CaptureFrame(const RECT& region, ID3D11Texture2D** outTexture) override {
         if (!m_initialized || !outTexture) return false;
 
-        // Check if region is on a different monitor
-        int monitorIndex = FindMonitorForRegion(region);
-        if (monitorIndex != m_currentMonitorIndex && monitorIndex >= 0) {
-            // Switch to the new monitor
-            if (!InitializeDuplicationForMonitor(monitorIndex)) {
-                // Fallback to current monitor
-                monitorIndex = m_currentMonitorIndex;
+        // Skip monitor switching if target is locked
+        if (!m_targetLocked) {
+            int monitorIndex = FindMonitorForRegion(region);
+            if (monitorIndex != m_currentMonitorIndex && monitorIndex >= 0) {
+                // Switch to the new monitor
+                if (!InitializeDuplicationForMonitor(monitorIndex)) {
+                    // Fallback to current monitor
+                    monitorIndex = m_currentMonitorIndex;
+                }
             }
         }
 
@@ -139,7 +141,7 @@ public:
         if (FAILED(hr)) return false;
 
         // Convert region from logical to physical coordinates (DPI-aware)
-        RECT physicalRegion = ConvertToPhysicalCoordinates(region, monitorIndex);
+        RECT physicalRegion = ConvertToPhysicalCoordinates(region, m_currentMonitorIndex);
 
         // Calculate region dimensions
         int regionWidth = physicalRegion.right - physicalRegion.left;
@@ -233,6 +235,39 @@ public:
 
     void SetSelfWindow(HWND hwnd) override {
         m_selfHwnd = hwnd;
+    }
+
+    void SetTargetBounds(const RECT& bounds) override {
+        if (m_targetLocked) {
+            LOG_DEBUG("DXGICapture::SetTargetBounds: Target already locked to monitor %d", m_currentMonitorIndex);
+            return;
+        }
+        
+        // Find monitor for the given bounds
+        int monitorIndex = FindMonitorForRegion(bounds);
+        
+        if (monitorIndex >= 0) {
+            if (monitorIndex != m_currentMonitorIndex) {
+                if (InitializeDuplicationForMonitor(monitorIndex)) {
+                    m_targetLocked = true;
+                    LOG_INFO("DXGICapture::SetTargetBounds: Locked to monitor %d, bounds=(%d,%d,%d,%d)",
+                        monitorIndex, bounds.left, bounds.top, bounds.right, bounds.bottom);
+                } else {
+                    // Keep current monitor but still lock
+                    m_targetLocked = true;
+                    LOG_WARN("DXGICapture::SetTargetBounds: Failed to switch to monitor %d, locked to current monitor %d",
+                        monitorIndex, m_currentMonitorIndex);
+                }
+            } else {
+                // Already on correct monitor, just lock
+                m_targetLocked = true;
+                LOG_INFO("DXGICapture::SetTargetBounds: Already on monitor %d, locked", monitorIndex);
+            }
+        }
+    }
+
+    bool IsTargetLocked() const override {
+        return m_targetLocked;
     }
 
 private:
@@ -461,6 +496,7 @@ private:
 
     bool m_initialized = false;
     bool m_frameAcquired = false;
+    bool m_targetLocked = false;  // Target monitor lock flag
     UINT m_outputWidth = 0;
     UINT m_outputHeight = 0;
     int m_cachedWidth = 0;

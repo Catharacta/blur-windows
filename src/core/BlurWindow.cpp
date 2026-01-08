@@ -53,6 +53,15 @@ public:
             }
         }
 
+        // Lock capture target to the monitor corresponding to this window's bounds
+        // This prevents multiple BlurWindows from fighting over the same capture session
+        if (m_capture) {
+            m_capture->SetTargetBounds(m_options.bounds);
+            LOG_INFO("Capture target locked to bounds: (%d,%d,%d,%d)",
+                m_options.bounds.left, m_options.bounds.top,
+                m_options.bounds.right, m_options.bounds.bottom);
+        }
+
         if (m_running.exchange(true)) {
             return;
         }

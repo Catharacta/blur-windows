@@ -48,6 +48,12 @@ public:
     /// Set self window handle for self-capture avoidance
     void SetSelfWindow(HWND hwnd) override;
 
+    /// Set target bounds and lock to the corresponding monitor
+    void SetTargetBounds(const RECT& bounds) override;
+
+    /// Check if target monitor is locked
+    bool IsTargetLocked() const override;
+
 private:
     void EnumerateMonitors();
     int FindMonitorForRegion(const RECT& region) const;
@@ -87,6 +93,7 @@ private:
     
     // State
     bool m_initialized = false;
+    bool m_targetLocked = false;  // Target monitor lock flag
     int m_frameWidth = 0;
     int m_frameHeight = 0;
     HWND m_selfHwnd = nullptr;

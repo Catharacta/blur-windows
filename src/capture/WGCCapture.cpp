@@ -300,12 +300,14 @@ void WGCCapture::OnFrameArrived(
 bool WGCCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** outTexture) {
     if (!m_initialized || !outTexture) return false;
 
-    // Check if we need to switch monitors
-    int targetMonitor = FindMonitorForRegion(region);
-    if (targetMonitor != m_currentMonitorIndex) {
-        LOG_DEBUG("WGCCapture: Switching from monitor %d to %d", m_currentMonitorIndex, targetMonitor);
-        if (!InitializeCaptureForMonitor(targetMonitor)) {
-            targetMonitor = m_currentMonitorIndex;
+    // Skip monitor switching if target is locked
+    if (!m_targetLocked) {
+        int targetMonitor = FindMonitorForRegion(region);
+        if (targetMonitor != m_currentMonitorIndex) {
+            LOG_DEBUG("WGCCapture: Switching from monitor %d to %d", m_currentMonitorIndex, targetMonitor);
+            if (!InitializeCaptureForMonitor(targetMonitor)) {
+                targetMonitor = m_currentMonitorIndex;
+            }
         }
     }
 
@@ -388,6 +390,39 @@ bool WGCCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** outTexture) 
 
 void WGCCapture::SetSelfWindow(HWND hwnd) {
     m_selfHwnd = hwnd;
+}
+
+void WGCCapture::SetTargetBounds(const RECT& bounds) {
+    if (m_targetLocked) {
+        LOG_DEBUG("WGCCapture::SetTargetBounds: Target already locked to monitor %d", m_currentMonitorIndex);
+        return;
+    }
+    
+    // Find monitor for the given bounds
+    int monitorIndex = FindMonitorForRegion(bounds);
+    
+    if (monitorIndex >= 0) {
+        if (monitorIndex != m_currentMonitorIndex) {
+            if (InitializeCaptureForMonitor(monitorIndex)) {
+                m_targetLocked = true;
+                LOG_INFO("WGCCapture::SetTargetBounds: Locked to monitor %d, bounds=(%d,%d,%d,%d)",
+                    monitorIndex, bounds.left, bounds.top, bounds.right, bounds.bottom);
+            } else {
+                // Keep current monitor but still lock
+                m_targetLocked = true;
+                LOG_WARN("WGCCapture::SetTargetBounds: Failed to switch to monitor %d, locked to current monitor %d",
+                    monitorIndex, m_currentMonitorIndex);
+            }
+        } else {
+            // Already on correct monitor, just lock
+            m_targetLocked = true;
+            LOG_INFO("WGCCapture::SetTargetBounds: Already on monitor %d, locked", monitorIndex);
+        }
+    }
+}
+
+bool WGCCapture::IsTargetLocked() const {
+    return m_targetLocked;
 }
 
 void WGCCapture::Shutdown() {
