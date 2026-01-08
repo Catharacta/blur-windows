@@ -93,6 +93,11 @@ Blur Window on Monitor C -> Captures Monitor C Desktop
 > [!NOTE]
 > The target monitor is determined from the center coordinates of the `bounds`. If the window position changes, the captured monitor switches automatically.
 
+### Internal Architecture and Thread Safety
+
+Each `BlurWindow` operates with an independent Direct3D 11 device and device context.
+This "Per-Window Device" architecture prevents conflicts in drawing commands and resources (causes of flickering or crashes) even when multiple windows are used simultaneously, ensuring high stability in multi-threaded environments.
+
 ### Control via C API
 
 You can explicitly set the capture method using the `blur_set_capture_method` function.
