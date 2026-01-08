@@ -103,6 +103,12 @@ BLURWINDOW_API BlurErrorCode blur_stop(BlurWindowHandle window);
 ```
 ブラーエフェクトの描画を開始/停止します。
 
+> [!IMPORTANT]
+> `blur_start` を呼び出すと、ウィンドウの `bounds` に基づいてターゲットモニターが自動的に決定され、そのモニター専用のキャプチャセッションが固定されます。
+> これにより、複数のブラーウィンドウが同時に存在しても、キャプチャセッションの競合による点滅や映像混入が発生しません。
+> 
+> ターゲットモニターは `bounds` の中心座標から決定されます。ウィンドウの位置を変更しても、キャプチャ対象のモニターは変更されません。
+
 ### `blur_set_effect_type`
 ```c
 BLURWINDOW_API BlurErrorCode blur_set_effect_type(BlurWindowHandle window, int32_t type);
