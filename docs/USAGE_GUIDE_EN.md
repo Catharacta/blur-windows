@@ -86,12 +86,12 @@ This ensures:
 
 ```
 Blur Window on Monitor A -> Captures Monitor A Desktop
-BlurWindow for Monitor B → Fixed capture of Monitor B's desktop
-BlurWindow for Monitor C → Fixed capture of Monitor C's desktop
+Blur Window on Monitor B -> Captures Monitor B Desktop
+Blur Window on Monitor C -> Captures Monitor C Desktop
 ```
 
 > [!NOTE]
-> The target monitor is determined from the center coordinates of the `bounds`. Even if the window position changes, the captured monitor remains the same.
+> The target monitor is determined from the center coordinates of the `bounds`. If the window position changes, the captured monitor switches automatically.
 
 ### Control via C API
 
