@@ -393,11 +393,6 @@ void WGCCapture::SetSelfWindow(HWND hwnd) {
 }
 
 void WGCCapture::SetTargetMonitor(HMONITOR monitor) {
-    if (m_targetLocked) {
-        LOG_DEBUG("WGCCapture::SetTargetMonitor: Target already locked to monitor %d", m_currentMonitorIndex);
-        return;
-    }
-
     // Find monitor with matching handle
     int monitorIndex = -1;
     for (size_t i = 0; i < m_monitors.size(); i++) {
@@ -411,15 +406,17 @@ void WGCCapture::SetTargetMonitor(HMONITOR monitor) {
         if (monitorIndex != m_currentMonitorIndex) {
             if (InitializeCaptureForMonitor(monitorIndex)) {
                 m_targetLocked = true;
-                LOG_INFO("WGCCapture::SetTargetMonitor: Locked to monitor %p (index %d)", monitor, monitorIndex);
+                LOG_INFO("WGCCapture::SetTargetMonitor: Switched to monitor %p (index %d)", monitor, monitorIndex);
             } else {
-                LOG_WARN("WGCCapture::SetTargetMonitor: Failed to switch to monitor %p, locked to current %d", 
+                LOG_WARN("WGCCapture::SetTargetMonitor: Failed to switch to monitor %p, staying on current %d", 
                          monitor, m_currentMonitorIndex);
                 m_targetLocked = true;
             }
         } else {
-            m_targetLocked = true;
-            LOG_INFO("WGCCapture::SetTargetMonitor: Already on target monitor %p, locked", monitor);
+            if (!m_targetLocked) {
+                m_targetLocked = true;
+                LOG_INFO("WGCCapture::SetTargetMonitor: Locked to current monitor %p", monitor);
+            }
         }
     } else {
         LOG_WARN("WGCCapture::SetTargetMonitor: Monitor %p not found in enumeration", monitor);

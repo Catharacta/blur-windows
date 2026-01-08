@@ -78,14 +78,14 @@ By default (`Auto`), the library operates with the following logic:
 
 ### Multiple Monitors / Multiple Windows Behavior
 
-Each `BlurWindow` automatically determines its target monitor based on its `bounds` when `blur_start` is called, and locks its capture session to that specific monitor.
+Each `BlurWindow` automatically determines the target monitor based on its `bounds` and maintains a capture session dedicated to that monitor (automatically switching when moved across monitors).
 
 This ensures:
-*   **No flickering**: Even when multiple blur windows exist simultaneously, capture sessions do not conflict.
-*   **No image mixing**: Each window captures only the desktop of its own monitor.
+*   **No flickering**: Capture sessions do not conflict even with multiple windows.
+*   **No image mixing**: Each window captures only its target monitor's desktop.
 
 ```
-BlurWindow for Monitor A → Fixed capture of Monitor A's desktop
+Blur Window on Monitor A -> Captures Monitor A Desktop
 BlurWindow for Monitor B → Fixed capture of Monitor B's desktop
 BlurWindow for Monitor C → Fixed capture of Monitor C's desktop
 ```

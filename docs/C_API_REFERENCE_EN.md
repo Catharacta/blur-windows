@@ -104,10 +104,11 @@ BLURWINDOW_API BlurErrorCode blur_stop(BlurWindowHandle window);
 Starts/stops rendering the blur effect.
 
 > [!IMPORTANT]
-> When `blur_start` is called, the target monitor is strictly identified via the Windows API (`MonitorFromPoint`) using the center coordinates of the `bounds`. A dedicated capture session is then locked to that specific monitor.
+> When `blur_start` is called, the target monitor is strictly identified via the Windows API (`MonitorFromPoint`) using the center coordinates of the `bounds`.
 > This ensures that even when multiple blur windows exist simultaneously, there is no flickering or image mixing caused by capture session conflicts.
 > 
-> *Note: Even if the window position changes afterward, the captured monitor remains based on the initial lock.*
+> If the window position changes, the target monitor is dynamically re-evaluated, and the capture session will switch if necessary.
+> *Note: A momentary flicker may occur during monitor switching due to resource reconstruction.*
 
 ### `blur_set_effect_type`
 ```c

@@ -128,6 +128,14 @@ public:
                 SWP_NOZORDER | SWP_NOACTIVATE
             );
         }
+
+        // Check for monitor change
+        if (m_graphicsInitialized && m_capture) {
+            POINT pt = { (bounds.left + bounds.right) / 2, 
+                         (bounds.top + bounds.bottom) / 2 };
+            HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            m_capture->SetTargetMonitor(hMon);
+        }
         
         // D3Dリソースの再作成はRenderLoop内で安全に処理
         {

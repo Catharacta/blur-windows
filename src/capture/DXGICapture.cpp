@@ -239,11 +239,6 @@ public:
     }
 
     void SetTargetMonitor(HMONITOR monitor) override {
-        if (m_targetLocked) {
-            LOG_DEBUG("DXGICapture::SetTargetMonitor: Target already locked to monitor %d", m_currentMonitorIndex);
-            return;
-        }
-
         // Find monitor with matching handle
         int monitorIndex = -1;
         for (size_t i = 0; i < m_monitors.size(); i++) {
@@ -254,19 +249,23 @@ public:
         }
         
         if (monitorIndex >= 0) {
+            // Only switch if monitor changed
             if (monitorIndex != m_currentMonitorIndex) {
                 if (InitializeDuplicationForMonitor(monitorIndex)) {
                     m_targetLocked = true;
-                    LOG_INFO("DXGICapture::SetTargetMonitor: Locked to monitor %p (index %d)", monitor, monitorIndex);
+                    LOG_INFO("DXGICapture::SetTargetMonitor: Switched to monitor %p (index %d)", monitor, monitorIndex);
                 } else {
-                    LOG_WARN("DXGICapture::SetTargetMonitor: Failed to switch to monitor %p, locked to current %d", 
+                    LOG_WARN("DXGICapture::SetTargetMonitor: Failed to switch to monitor %p, staying on current %d", 
                              monitor, m_currentMonitorIndex);
-                    // Force lock anyway to prevent thrashing
+                    // Ensure locked to prevent further attempts if it keeps failing
                     m_targetLocked = true;
                 }
             } else {
-                m_targetLocked = true;
-                LOG_INFO("DXGICapture::SetTargetMonitor: Already on target monitor %p, locked", monitor);
+                // Same monitor, ensure locked status
+                if (!m_targetLocked) {
+                    m_targetLocked = true;
+                    LOG_INFO("DXGICapture::SetTargetMonitor: Locked to current monitor %p", monitor);
+                }
             }
         } else {
             LOG_WARN("DXGICapture::SetTargetMonitor: Monitor %p not found in enumeration", monitor);
