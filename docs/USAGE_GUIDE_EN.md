@@ -76,6 +76,23 @@ By default (`Auto`), the library operates with the following logic:
 *   **If WGC is available**: It prioritizes using WGC. This ensures blur works regardless of your GPU configuration.
 *   **If WGC is unavailable**: It automatically falls back to DXGI for older Windows environments.
 
+### Multiple Monitors / Multiple Windows Behavior
+
+Each `BlurWindow` automatically determines its target monitor based on its `bounds` when `blur_start` is called, and locks its capture session to that specific monitor.
+
+This ensures:
+*   **No flickering**: Even when multiple blur windows exist simultaneously, capture sessions do not conflict.
+*   **No image mixing**: Each window captures only the desktop of its own monitor.
+
+```
+BlurWindow for Monitor A → Fixed capture of Monitor A's desktop
+BlurWindow for Monitor B → Fixed capture of Monitor B's desktop
+BlurWindow for Monitor C → Fixed capture of Monitor C's desktop
+```
+
+> [!NOTE]
+> The target monitor is determined from the center coordinates of the `bounds`. Even if the window position changes, the captured monitor remains the same.
+
 ### Control via C API
 
 You can explicitly set the capture method using the `blur_set_capture_method` function.
