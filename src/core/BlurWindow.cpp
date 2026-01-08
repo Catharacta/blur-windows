@@ -56,10 +56,12 @@ public:
         // Lock capture target to the monitor corresponding to this window's bounds
         // This prevents multiple BlurWindows from fighting over the same capture session
         if (m_capture) {
-            m_capture->SetTargetBounds(m_options.bounds);
-            LOG_INFO("Capture target locked to bounds: (%d,%d,%d,%d)",
-                m_options.bounds.left, m_options.bounds.top,
-                m_options.bounds.right, m_options.bounds.bottom);
+            POINT pt = { (m_options.bounds.left + m_options.bounds.right) / 2, 
+                         (m_options.bounds.top + m_options.bounds.bottom) / 2 };
+            HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            
+            m_capture->SetTargetMonitor(hMon);
+            LOG_INFO("Capture target monitor locked: %p (center: %d,%d)", hMon, pt.x, pt.y);
         }
 
         if (m_running.exchange(true)) {

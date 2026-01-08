@@ -1,7 +1,7 @@
 #pragma once
-
 #include <d3d11.h>
 #include <wrl/client.h>
+#include <windows.h>
 
 namespace blurwindow {
 
@@ -30,10 +30,9 @@ public:
     /// @param hwnd Self window handle
     virtual void SetSelfWindow(HWND hwnd) = 0;
 
-    /// Set target bounds and lock to the corresponding monitor
-    /// Once locked, CaptureFrame will not switch to a different monitor
-    /// @param bounds Target region bounds (used to determine target monitor)
-    virtual void SetTargetBounds(const RECT& bounds) = 0;
+    /// Set target monitor and lock initialization to it
+    /// @param monitor Target monitor handle (HMONITOR)
+    virtual void SetTargetMonitor(HMONITOR monitor) = 0;
 
     /// Check if target monitor is locked
     /// @return true if target is locked

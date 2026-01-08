@@ -48,8 +48,8 @@ public:
     /// Set self window handle for self-capture avoidance
     void SetSelfWindow(HWND hwnd) override;
 
-    /// Set target bounds and lock to the corresponding monitor
-    void SetTargetBounds(const RECT& bounds) override;
+    /// Set target monitor and lock to it
+    void SetTargetMonitor(HMONITOR monitor) override;
 
     /// Check if target monitor is locked
     bool IsTargetLocked() const override;

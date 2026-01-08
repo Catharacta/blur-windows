@@ -20,6 +20,7 @@ struct MonitorInfo {
     int adapterIndex;              // Index of the adapter
     RECT bounds;                   // Physical coordinates
     UINT dpi;                      // DPI scale
+    HMONITOR hMonitor;             // Monitor handle
     bool isPrimary;
 };
 
@@ -237,32 +238,38 @@ public:
         m_selfHwnd = hwnd;
     }
 
-    void SetTargetBounds(const RECT& bounds) override {
+    void SetTargetMonitor(HMONITOR monitor) override {
         if (m_targetLocked) {
-            LOG_DEBUG("DXGICapture::SetTargetBounds: Target already locked to monitor %d", m_currentMonitorIndex);
+            LOG_DEBUG("DXGICapture::SetTargetMonitor: Target already locked to monitor %d", m_currentMonitorIndex);
             return;
         }
-        
-        // Find monitor for the given bounds
-        int monitorIndex = FindMonitorForRegion(bounds);
+
+        // Find monitor with matching handle
+        int monitorIndex = -1;
+        for (size_t i = 0; i < m_monitors.size(); i++) {
+            if (m_monitors[i].hMonitor == monitor) {
+                monitorIndex = static_cast<int>(i);
+                break;
+            }
+        }
         
         if (monitorIndex >= 0) {
             if (monitorIndex != m_currentMonitorIndex) {
                 if (InitializeDuplicationForMonitor(monitorIndex)) {
                     m_targetLocked = true;
-                    LOG_INFO("DXGICapture::SetTargetBounds: Locked to monitor %d, bounds=(%d,%d,%d,%d)",
-                        monitorIndex, bounds.left, bounds.top, bounds.right, bounds.bottom);
+                    LOG_INFO("DXGICapture::SetTargetMonitor: Locked to monitor %p (index %d)", monitor, monitorIndex);
                 } else {
-                    // Keep current monitor but still lock
+                    LOG_WARN("DXGICapture::SetTargetMonitor: Failed to switch to monitor %p, locked to current %d", 
+                             monitor, m_currentMonitorIndex);
+                    // Force lock anyway to prevent thrashing
                     m_targetLocked = true;
-                    LOG_WARN("DXGICapture::SetTargetBounds: Failed to switch to monitor %d, locked to current monitor %d",
-                        monitorIndex, m_currentMonitorIndex);
                 }
             } else {
-                // Already on correct monitor, just lock
                 m_targetLocked = true;
-                LOG_INFO("DXGICapture::SetTargetBounds: Already on monitor %d, locked", monitorIndex);
+                LOG_INFO("DXGICapture::SetTargetMonitor: Already on target monitor %p, locked", monitor);
             }
+        } else {
+            LOG_WARN("DXGICapture::SetTargetMonitor: Monitor %p not found in enumeration", monitor);
         }
     }
 
@@ -342,6 +349,7 @@ private:
                 info.adapter = adapter;
                 info.adapterIndex = adapterIdx;
                 info.bounds = desc.DesktopCoordinates;
+                info.hMonitor = desc.Monitor;
                 info.isPrimary = (adapterIdx == 0 && outputIdx == 0);
                 
                 // Get DPI for this monitor
