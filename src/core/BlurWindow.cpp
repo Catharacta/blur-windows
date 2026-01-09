@@ -170,7 +170,7 @@ public:
         LOG_INFO("SetEffectPipeline: detected type=%d from config", static_cast<int>(type));
 
         auto newEffect = SubsystemFactory::CreateEffect(type);
-        if (newEffect && newEffect->Initialize(m_device)) {
+        if (newEffect && newEffect->Initialize(m_device.Get())) {
             std::lock_guard<std::mutex> lock(m_graphicsMutex);
             // Preserve current strength and apply to new effect
             newEffect->SetStrength(m_currentStrength);
@@ -230,7 +230,7 @@ public:
         
         m_capture = SubsystemFactory::CreateCapture(type);
         if (m_capture) {
-            if (!m_capture->Initialize(m_device)) {
+            if (!m_capture->Initialize(m_device.Get())) {
                 LOG_ERROR("Failed to initialize new capture subsystem.");
                 m_capture.reset();
             } else {
@@ -251,8 +251,8 @@ public:
             return;
         }
         
-        if (!newEffect->Initialize(m_device)) {
-            LOG_ERROR("SetEffectTypeInternal: Initialize failed, m_device={}", (void*)m_device);
+        if (!newEffect->Initialize(m_device.Get())) {
+            LOG_ERROR("SetEffectTypeInternal: Initialize failed, m_device={}", (void*)m_device.Get());
             return;
         }
         
@@ -436,7 +436,7 @@ private:
         // 1. Initialize capture
         m_capture = SubsystemFactory::CreateCapture(CaptureType::Auto);
         if (m_capture) {
-            if (!m_capture->Initialize(m_device)) {
+            if (!m_capture->Initialize(m_device.Get())) {
                 LOG_ERROR("Failed to initialize capture subsystem.");
                 m_capture.reset();
             } else {
@@ -447,7 +447,7 @@ private:
         // 2. Initialize effect
         m_effect = SubsystemFactory::CreateEffect(EffectType::Gaussian);
         if (m_effect) {
-            if (!m_effect->Initialize(m_device)) {
+            if (!m_effect->Initialize(m_device.Get())) {
                 LOG_ERROR("Failed to initialize Gaussian effect.");
                 m_effect.reset();
             } else {
@@ -457,7 +457,7 @@ private:
         
         // 3. Initialize presenter
         PresenterType presenterType = m_useDirectComp ? PresenterType::DirectComp : PresenterType::ULW;
-        auto presenter = SubsystemFactory::CreatePresenter(presenterType, m_hwnd, m_device);
+        auto presenter = SubsystemFactory::CreatePresenter(presenterType, m_hwnd, m_device.Get());
         
         if (!presenter && m_useDirectComp) {
             LOG_WARN("DirectComp presenter failed. Falling back to ULW...");
@@ -474,7 +474,7 @@ private:
                 LOG_INFO("Switched window style to WS_EX_LAYERED for fallback.");
             }
 
-            presenter = SubsystemFactory::CreatePresenter(PresenterType::ULW, m_hwnd, m_device);
+            presenter = SubsystemFactory::CreatePresenter(PresenterType::ULW, m_hwnd, m_device.Get());
         }
         
         if (presenter) {
@@ -807,7 +807,7 @@ private:
     RECT m_pendingBounds = {};
 
     // Graphics resources
-    ID3D11Device* m_device = nullptr;
+    ComPtr<ID3D11Device> m_device;
     ComPtr<ID3D11DeviceContext> m_context;
     ComPtr<ID3D11Texture2D> m_outputTexture;
     ComPtr<ID3D11ShaderResourceView> m_outputSRV;
