@@ -1,6 +1,7 @@
 #include "FrostedGlassBlur.h"
 #include "../core/ShaderLoader.h"
 #include "../core/FullscreenRenderer.h"
+#include "../core/Logger.h"
 #include <cstdio>
 #include <cstring>
 
@@ -134,6 +135,13 @@ bool FrostedGlassBlur::Apply(ID3D11DeviceContext* context,
                               ID3D11RenderTargetView* output,
                               uint32_t width, uint32_t height) {
     if (!m_frostedPS || !input || !output) return false;
+    
+    // Diagnostic log for effect parameters (throttled)
+    static int frameCount = 0;
+    if (frameCount++ % 300 == 0) {
+        LOG_INFO("FrostedGlassBlur::Apply: strength=%.2f, distortion=%.3f, cellScale=%.1f",
+                 m_strength, m_distortionStrength, m_cellScale);
+    }
     
     // Update constant buffer
     D3D11_MAPPED_SUBRESOURCE mapped;

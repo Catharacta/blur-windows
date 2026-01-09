@@ -1,6 +1,7 @@
 #include "IBlurEffect.h"
 #include "../core/ShaderLoader.h"
 #include "../core/FullscreenRenderer.h"
+#include "../core/Logger.h"
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -253,6 +254,13 @@ public:
     ) override {
         if (!m_initialized) {
             return false;
+        }
+
+        // Diagnostic log for effect parameters (throttled to avoid spam)
+        static int frameCount = 0;
+        if (frameCount++ % 300 == 0) {  // Log every ~5 seconds at 60fps
+            LOG_INFO("GaussianBlur::Apply: noiseIntensity=%.3f, noiseType=%d, noiseScale=%.1f, strength=%.2f",
+                     m_noiseIntensity, m_noiseType, m_noiseScale, m_strength);
         }
 
         EnsureTextures(width, height);

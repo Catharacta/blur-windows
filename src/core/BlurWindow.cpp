@@ -215,6 +215,7 @@ public:
 
     void SetEffectType(int type) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        LOG_INFO("SetEffectType: window=%p, hwnd=%p, type=%d", this, m_hwnd, type);
         SetEffectTypeInternal(type);
     }
 
@@ -297,6 +298,7 @@ public:
 
     void SetNoiseIntensity(float intensity) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        LOG_INFO("SetNoiseIntensity: window=%p, hwnd=%p, intensity=%.3f", this, m_hwnd, intensity);
         m_noiseIntensity = intensity;
         if (m_effect) m_effect->SetNoiseIntensity(intensity);
     }
@@ -315,6 +317,7 @@ public:
 
     void SetNoiseType(int type) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        LOG_INFO("SetNoiseType: window=%p, hwnd=%p, type=%d", this, m_hwnd, type);
         m_noiseType = type;
         if (m_effect) m_effect->SetNoiseType(type);
     }
