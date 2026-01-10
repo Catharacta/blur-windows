@@ -129,17 +129,15 @@ bool GlassBlur::Apply(ID3D11DeviceContext* context,
     context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
     context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
     
-    // Draw fullscreen quad
-    static FullscreenRenderer renderer;
-    static bool initialized = false;
-    if (!initialized) {
+    // Draw fullscreen quad (using per-instance renderer to avoid cross-device issues)
+    if (!m_rendererInitialized) {
         ID3D11Device* dev = nullptr;
         context->GetDevice(&dev);
-        renderer.Initialize(dev);
+        m_fullscreenRenderer.Initialize(dev);
         dev->Release();
-        initialized = true;
+        m_rendererInitialized = true;
     }
-    renderer.DrawFullscreen(context);
+    m_fullscreenRenderer.DrawFullscreen(context);
     
     // Cleanup
     ID3D11ShaderResourceView* nullSRV = nullptr;

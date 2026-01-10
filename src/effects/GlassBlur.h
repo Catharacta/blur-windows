@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IBlurEffect.h"
+#include "../core/FullscreenRenderer.h"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <memory>
@@ -38,6 +39,10 @@ private:
     Microsoft::WRL::ComPtr<ID3D11PixelShader> m_glassPS;
     Microsoft::WRL::ComPtr<ID3D11SamplerState> m_sampler;
     Microsoft::WRL::ComPtr<ID3D11Buffer> m_constantBuffer;
+    
+    // Per-instance FullscreenRenderer (fixes cross-device resource sharing)
+    FullscreenRenderer m_fullscreenRenderer;
+    bool m_rendererInitialized = false;
     
     float m_strength = 1.0f;
     float m_opacity = 1.0f;
