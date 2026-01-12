@@ -20,6 +20,7 @@ struct MonitorInfo {
     int adapterIndex;              // Index of the adapter
     RECT bounds;                   // Physical coordinates
     UINT dpi;                      // DPI scale
+    HMONITOR hMonitor;             // Monitor handle
     bool isPrimary;
 };
 
@@ -83,13 +84,15 @@ public:
     bool CaptureFrame(const RECT& region, ID3D11Texture2D** outTexture) override {
         if (!m_initialized || !outTexture) return false;
 
-        // Check if region is on a different monitor
-        int monitorIndex = FindMonitorForRegion(region);
-        if (monitorIndex != m_currentMonitorIndex && monitorIndex >= 0) {
-            // Switch to the new monitor
-            if (!InitializeDuplicationForMonitor(monitorIndex)) {
-                // Fallback to current monitor
-                monitorIndex = m_currentMonitorIndex;
+        // Skip monitor switching if target is locked
+        if (!m_targetLocked) {
+            int monitorIndex = FindMonitorForRegion(region);
+            if (monitorIndex != m_currentMonitorIndex && monitorIndex >= 0) {
+                // Switch to the new monitor
+                if (!InitializeDuplicationForMonitor(monitorIndex)) {
+                    // Fallback to current monitor
+                    monitorIndex = m_currentMonitorIndex;
+                }
             }
         }
 
@@ -139,7 +142,7 @@ public:
         if (FAILED(hr)) return false;
 
         // Convert region from logical to physical coordinates (DPI-aware)
-        RECT physicalRegion = ConvertToPhysicalCoordinates(region, monitorIndex);
+        RECT physicalRegion = ConvertToPhysicalCoordinates(region, m_currentMonitorIndex);
 
         // Calculate region dimensions
         int regionWidth = physicalRegion.right - physicalRegion.left;
@@ -235,6 +238,44 @@ public:
         m_selfHwnd = hwnd;
     }
 
+    void SetTargetMonitor(HMONITOR monitor) override {
+        // Find monitor with matching handle
+        int monitorIndex = -1;
+        for (size_t i = 0; i < m_monitors.size(); i++) {
+            if (m_monitors[i].hMonitor == monitor) {
+                monitorIndex = static_cast<int>(i);
+                break;
+            }
+        }
+        
+        if (monitorIndex >= 0) {
+            // Only switch if monitor changed
+            if (monitorIndex != m_currentMonitorIndex) {
+                if (InitializeDuplicationForMonitor(monitorIndex)) {
+                    m_targetLocked = true;
+                    LOG_INFO("DXGICapture::SetTargetMonitor: Switched to monitor %p (index %d)", monitor, monitorIndex);
+                } else {
+                    LOG_WARN("DXGICapture::SetTargetMonitor: Failed to switch to monitor %p, staying on current %d", 
+                             monitor, m_currentMonitorIndex);
+                    // Ensure locked to prevent further attempts if it keeps failing
+                    m_targetLocked = true;
+                }
+            } else {
+                // Same monitor, ensure locked status
+                if (!m_targetLocked) {
+                    m_targetLocked = true;
+                    LOG_INFO("DXGICapture::SetTargetMonitor: Locked to current monitor %p", monitor);
+                }
+            }
+        } else {
+            LOG_WARN("DXGICapture::SetTargetMonitor: Monitor %p not found in enumeration", monitor);
+        }
+    }
+
+    bool IsTargetLocked() const override {
+        return m_targetLocked;
+    }
+
 private:
     void EnumerateAllAdaptersAndMonitors(IDXGIAdapter* primaryAdapter) {
         m_monitors.clear();
@@ -307,6 +348,7 @@ private:
                 info.adapter = adapter;
                 info.adapterIndex = adapterIdx;
                 info.bounds = desc.DesktopCoordinates;
+                info.hMonitor = desc.Monitor;
                 info.isPrimary = (adapterIdx == 0 && outputIdx == 0);
                 
                 // Get DPI for this monitor
@@ -461,6 +503,7 @@ private:
 
     bool m_initialized = false;
     bool m_frameAcquired = false;
+    bool m_targetLocked = false;  // Target monitor lock flag
     UINT m_outputWidth = 0;
     UINT m_outputHeight = 0;
     int m_cachedWidth = 0;

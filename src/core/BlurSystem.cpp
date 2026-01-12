@@ -26,44 +26,12 @@ public:
 
         m_options = opts;
 
-        // Create D3D11 device
-        D3D_FEATURE_LEVEL featureLevels[] = {
-            D3D_FEATURE_LEVEL_11_1,
-            D3D_FEATURE_LEVEL_11_0,
-        };
+        m_options = opts;
 
-        UINT createFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-#ifdef _DEBUG
-        createFlags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
+        // D3D11 Device creation moved to BlurWindow to ensure thread safety (one device per window)
+        // See BlurWindow::InitializeGraphicsBasics
 
-        HRESULT hr = D3D11CreateDevice(
-            nullptr,                    // Default adapter
-            D3D_DRIVER_TYPE_HARDWARE,   // Hardware device
-            nullptr,                    // No software rasterizer
-            createFlags,
-            featureLevels,
-            ARRAYSIZE(featureLevels),
-            D3D11_SDK_VERSION,
-            m_device.GetAddressOf(),
-            &m_featureLevel,
-            m_context.GetAddressOf()
-        );
-
-        if (FAILED(hr)) {
-            // Try without debug layer
-            createFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
-            hr = D3D11CreateDevice(
-                nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-                createFlags, featureLevels, ARRAYSIZE(featureLevels),
-                D3D11_SDK_VERSION,
-                m_device.GetAddressOf(), &m_featureLevel, m_context.GetAddressOf()
-            );
-        }
-
-        if (FAILED(hr)) {
-            return false;
-        }
+        m_initialized = true;
 
         m_initialized = true;
         
@@ -88,8 +56,8 @@ public:
         std::lock_guard<std::mutex> lock(m_mutex);
         
         m_windows.clear();
-        m_context.Reset();
-        m_device.Reset();
+        m_windows.clear();
+        // Devices are now owned by individual windows
         m_initialized = false;
     }
 
@@ -97,13 +65,7 @@ public:
         return m_initialized;
     }
 
-    ID3D11Device* GetDevice() const {
-        return m_device.Get();
-    }
 
-    ID3D11DeviceContext* GetContext() const {
-        return m_context.Get();
-    }
 
     void RegisterWindow(BlurWindow* window) {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -123,9 +85,6 @@ private:
     bool m_initialized = false;
     BlurSystemOptions m_options{};
     
-    ComPtr<ID3D11Device> m_device;
-    ComPtr<ID3D11DeviceContext> m_context;
-    D3D_FEATURE_LEVEL m_featureLevel = D3D_FEATURE_LEVEL_11_0;
     
     std::vector<BlurWindow*> m_windows;
 };
@@ -156,9 +115,7 @@ bool BlurSystem::IsInitialized() const {
     return m_impl->IsInitialized();
 }
 
-ID3D11Device* BlurSystem::GetDevice() const {
-    return m_impl->GetDevice();
-}
+
 
 std::unique_ptr<BlurWindow> BlurSystem::CreateBlurWindow(HWND owner, const WindowOptions& opts) {
     if (!m_impl->IsInitialized()) {

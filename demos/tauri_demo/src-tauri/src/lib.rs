@@ -1,4 +1,5 @@
 use std::sync::Mutex;
+use tauri::Manager;
 
 // C API structure matching c_api.h
 #[repr(C)]
@@ -14,6 +15,7 @@ struct BlurSystemOptionsC {
     enable_logging: i32,
     log_path: *const std::ffi::c_char,
     default_preset: i32,
+    capture_method: i32,
 }
 
 #[repr(C)]
@@ -22,6 +24,7 @@ struct BlurWindowOptionsC {
     bounds: BlurRect,
     top_most: i32,
     click_through: i32,
+    capture_method: i32,
 }
 
 extern "C" {
@@ -65,9 +68,11 @@ unsafe impl Sync for BlurState {}
 
 #[tauri::command]
 fn start_blur(
+    app: tauri::AppHandle,
     state: tauri::State<'_, BlurState>,
     effect_type: Option<i32>,
     bounds: Option<(i32, i32, i32, i32)>,
+    capture_method: Option<i32>, // New argument
 ) -> Result<(), String> {
     let mut sys_lock = state.sys.lock().unwrap();
     let mut window_lock = state.window.lock().unwrap();
@@ -78,12 +83,24 @@ fn start_blur(
 
     unsafe {
         if sys_lock.is_none() {
-            // Create log file path
-            let log_path = std::ffi::CString::new("blurwindow.log").unwrap();
+            // Create log file path using app_log_dir
+            let log_path = match app.path().app_log_dir() {
+                Ok(path) => {
+                    if !path.exists() {
+                        let _ = std::fs::create_dir_all(&path);
+                    }
+                    let file_path = path.join("blur_dll.log");
+                    std::ffi::CString::new(file_path.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                }
+                Err(_) => std::ffi::CString::new("blur_dll.log").unwrap(),
+            };
+
             let sys_opts = BlurSystemOptionsC {
                 enable_logging: 1,
                 log_path: log_path.as_ptr(),
                 default_preset: 0,
+                capture_method: 0, // Auto
             };
             let sys = blur_init(&sys_opts);
             if sys.is_null() {
@@ -107,6 +124,7 @@ fn start_blur(
             },
             top_most: 1,
             click_through: 0,
+            capture_method: capture_method.unwrap_or(0), // Use provided method or Auto
         };
 
         // Passing null as owner for standalone window

@@ -16,6 +16,7 @@ void PrintHelp() {
     std::cout << "  [+/-]  Resize window" << std::endl;
     std::cout << "  [t]    Toggle topmost" << std::endl;
     std::cout << "  [c]    Toggle click-through" << std::endl;
+    std::cout << "  [m]    Switch capture method (Auto -> DXGI -> WGC -> Mag)" << std::endl;
     std::cout << "  [h]    Show this help" << std::endl;
     std::cout << "  [q]    Quit" << std::endl;
     std::cout << "================\n" << std::endl;
@@ -180,6 +181,21 @@ int main() {
                             SetWindowLongPtr(window->GetHWND(), GWL_EXSTYLE, style);
                         }
                         std::cout << "\n>>> Click-through: " << (clickThrough ? "ON" : "OFF") << std::endl;
+                        break;
+
+                    case 'm': case 'M':
+                        {
+                            static int captureMode = 0;
+                            captureMode = (captureMode + 1) % 4; // 0=Auto, 1=DXGI, 2=WGC, 3=Mag
+                            window->SetCaptureMethod(static_cast<CaptureType>(captureMode));
+                            
+                            const char* modeName = "Auto";
+                            if (captureMode == 1) modeName = "DXGI";
+                            else if (captureMode == 2) modeName = "WGC";
+                            else if (captureMode == 3) modeName = "Magnification";
+                            
+                            std::cout << "\n>>> Capture Method: " << modeName << std::endl;
+                        }
                         break;
                     
                     case 'h': case 'H':

@@ -35,7 +35,8 @@ async function startBlur() {
   try {
     const effectType = parseInt(document.getElementById("select-effect").value);
     const bounds = getBoundsFromMonitorSelection();
-    await invoke("start_blur", { effectType, bounds });
+    const captureMethod = parseInt(document.getElementById("select-capture").value);
+    await invoke("start_blur", { effectType, bounds, captureMethod });
     document.body.classList.add("running");
     statusText.textContent = "Running";
     appendLog(`Blur started (Effect: ${effectType}, Bounds: ${bounds.join(",")}).`);

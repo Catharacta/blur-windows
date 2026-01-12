@@ -31,6 +31,7 @@ enum class PresenterType {
 // Forward declarations for factory functions (defined in respective .cpp files)
 std::unique_ptr<ICaptureSubsystem> CreateDXGICapture();
 std::unique_ptr<ICaptureSubsystem> CreateWGCCapture();  // Windows Graphics Capture
+std::unique_ptr<ICaptureSubsystem> CreateMagnificationCapture(); // Windows Magnification API
 bool IsWGCAvailable();  // Check if WGC is available on this system
 std::unique_ptr<IBlurEffect> CreateGaussianBlur();
 std::unique_ptr<IBlurEffect> CreateKawaseBlur();
@@ -62,6 +63,9 @@ public:
                 
             case CaptureType::WGC:
                 return CreateWGCCapture();
+
+            case CaptureType::Magnification:
+                return CreateMagnificationCapture();
                 
             case CaptureType::DXGI:
             default:

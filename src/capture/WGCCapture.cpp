@@ -300,12 +300,14 @@ void WGCCapture::OnFrameArrived(
 bool WGCCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** outTexture) {
     if (!m_initialized || !outTexture) return false;
 
-    // Check if we need to switch monitors
-    int targetMonitor = FindMonitorForRegion(region);
-    if (targetMonitor != m_currentMonitorIndex) {
-        LOG_DEBUG("WGCCapture: Switching from monitor %d to %d", m_currentMonitorIndex, targetMonitor);
-        if (!InitializeCaptureForMonitor(targetMonitor)) {
-            targetMonitor = m_currentMonitorIndex;
+    // Skip monitor switching if target is locked
+    if (!m_targetLocked) {
+        int targetMonitor = FindMonitorForRegion(region);
+        if (targetMonitor != m_currentMonitorIndex) {
+            LOG_DEBUG("WGCCapture: Switching from monitor %d to %d", m_currentMonitorIndex, targetMonitor);
+            if (!InitializeCaptureForMonitor(targetMonitor)) {
+                targetMonitor = m_currentMonitorIndex;
+            }
         }
     }
 
@@ -388,6 +390,41 @@ bool WGCCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** outTexture) 
 
 void WGCCapture::SetSelfWindow(HWND hwnd) {
     m_selfHwnd = hwnd;
+}
+
+void WGCCapture::SetTargetMonitor(HMONITOR monitor) {
+    // Find monitor with matching handle
+    int monitorIndex = -1;
+    for (size_t i = 0; i < m_monitors.size(); i++) {
+        if (m_monitors[i].hMonitor == monitor) {
+            monitorIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    
+    if (monitorIndex >= 0) {
+        if (monitorIndex != m_currentMonitorIndex) {
+            if (InitializeCaptureForMonitor(monitorIndex)) {
+                m_targetLocked = true;
+                LOG_INFO("WGCCapture::SetTargetMonitor: Switched to monitor %p (index %d)", monitor, monitorIndex);
+            } else {
+                LOG_WARN("WGCCapture::SetTargetMonitor: Failed to switch to monitor %p, staying on current %d", 
+                         monitor, m_currentMonitorIndex);
+                m_targetLocked = true;
+            }
+        } else {
+            if (!m_targetLocked) {
+                m_targetLocked = true;
+                LOG_INFO("WGCCapture::SetTargetMonitor: Locked to current monitor %p", monitor);
+            }
+        }
+    } else {
+        LOG_WARN("WGCCapture::SetTargetMonitor: Monitor %p not found in enumeration", monitor);
+    }
+}
+
+bool WGCCapture::IsTargetLocked() const {
+    return m_targetLocked;
 }
 
 void WGCCapture::Shutdown() {

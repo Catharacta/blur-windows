@@ -23,7 +23,7 @@ Provides more flexible blur, tint, and noise compositing than the OS-standard Ac
 
 - **Language**: C++17
 - **Graphics API**: Direct3D 11 / HLSL
-- **Capture**: DXGI Desktop Duplication API
+- **Capture**: DXGI Desktop Duplication / Windows Graphics Capture / Magnification API (Supports exclusion to prevent mirror loops in OBS)
 - **Presentation**: DirectComposition / Layered Window (UpdateLayeredWindow)
 
 ## Quick Start (C++)

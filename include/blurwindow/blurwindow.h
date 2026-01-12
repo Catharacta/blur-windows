@@ -46,7 +46,8 @@ enum class QualityPreset {
 enum class CaptureType {
     Auto,           // Auto-select (WGC if available, else DXGI)
     DXGI,           // DXGI Desktop Duplication
-    WGC             // Windows.Graphics.Capture (cross-GPU capable)
+    WGC,            // Windows.Graphics.Capture (cross-GPU capable)
+    Magnification   // Windows Magnification API (supports exclusion)
 };
 
 /// Window creation options
@@ -87,9 +88,7 @@ public:
     /// Check if system is initialized
     bool IsInitialized() const;
 
-    /// Get the D3D11 device (internal use)
-    /// @return D3D11 device pointer, nullptr if not initialized
-    ID3D11Device* GetDevice() const;
+
 
     /// Create a blur window
     /// @param owner Owner window handle

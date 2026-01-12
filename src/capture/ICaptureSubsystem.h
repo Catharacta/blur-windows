@@ -1,7 +1,7 @@
 #pragma once
-
 #include <d3d11.h>
 #include <wrl/client.h>
+#include <windows.h>
 
 namespace blurwindow {
 
@@ -29,6 +29,14 @@ public:
     /// Set self window handle for self-capture avoidance
     /// @param hwnd Self window handle
     virtual void SetSelfWindow(HWND hwnd) = 0;
+
+    /// Set target monitor and lock initialization to it
+    /// @param monitor Target monitor handle (HMONITOR)
+    virtual void SetTargetMonitor(HMONITOR monitor) = 0;
+
+    /// Check if target monitor is locked
+    /// @return true if target is locked
+    virtual bool IsTargetLocked() const = 0;
 };
 
 } // namespace blurwindow

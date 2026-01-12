@@ -7,6 +7,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <cstdio>
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <windowsx.h>  // for GET_X_LPARAM, GET_Y_LPARAM
@@ -51,6 +52,17 @@ public:
                 LOG_ERROR("Initialization failed. Cannot start render thread.");
                 return;
             }
+        }
+
+        // Lock capture target to the monitor corresponding to this window's bounds
+        // This prevents multiple BlurWindows from fighting over the same capture session
+        if (m_capture) {
+            POINT pt = { (m_options.bounds.left + m_options.bounds.right) / 2, 
+                         (m_options.bounds.top + m_options.bounds.bottom) / 2 };
+            HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            
+            m_capture->SetTargetMonitor(hMon);
+            LOG_INFO("Capture target monitor locked: %p (center: %d,%d)", hMon, pt.x, pt.y);
         }
 
         if (m_running.exchange(true)) {
@@ -117,6 +129,14 @@ public:
                 SWP_NOZORDER | SWP_NOACTIVATE
             );
         }
+
+        // Check for monitor change
+        if (m_graphicsInitialized && m_capture) {
+            POINT pt = { (bounds.left + bounds.right) / 2, 
+                         (bounds.top + bounds.bottom) / 2 };
+            HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            m_capture->SetTargetMonitor(hMon);
+        }
         
         // D3Dリソースの再作成はRenderLoop内で安全に処理
         {
@@ -151,7 +171,7 @@ public:
         LOG_INFO("SetEffectPipeline: detected type=%d from config", static_cast<int>(type));
 
         auto newEffect = SubsystemFactory::CreateEffect(type);
-        if (newEffect && newEffect->Initialize(m_device)) {
+        if (newEffect && newEffect->Initialize(m_device.Get())) {
             std::lock_guard<std::mutex> lock(m_graphicsMutex);
             // Preserve current strength and apply to new effect
             newEffect->SetStrength(m_currentStrength);
@@ -196,6 +216,7 @@ public:
 
     void SetEffectType(int type) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        LOG_INFO("SetEffectType: window=%p, hwnd=%p, type=%d", this, m_hwnd, type);
         SetEffectTypeInternal(type);
     }
 
@@ -211,7 +232,7 @@ public:
         
         m_capture = SubsystemFactory::CreateCapture(type);
         if (m_capture) {
-            if (!m_capture->Initialize(m_device)) {
+            if (!m_capture->Initialize(m_device.Get())) {
                 LOG_ERROR("Failed to initialize new capture subsystem.");
                 m_capture.reset();
             } else {
@@ -226,16 +247,30 @@ public:
         EffectType effectType = static_cast<EffectType>(type);
         LOG_DEBUG("SetEffectTypeInternal: switching to type {}", type);
         
+        // Debug output to terminal
+        printf("[DLL] SetEffectTypeInternal: type=%d, window=%p, hwnd=%p\n", type, this, m_hwnd);
+        fflush(stdout);
+        
         auto newEffect = SubsystemFactory::CreateEffect(effectType);
         if (!newEffect) {
+            printf("[DLL] SetEffectTypeInternal: CreateEffect FAILED for type %d\n", type);
+            fflush(stdout);
             LOG_ERROR("SetEffectTypeInternal: CreateEffect failed for type {}", type);
             return;
         }
         
-        if (!newEffect->Initialize(m_device)) {
-            LOG_ERROR("SetEffectTypeInternal: Initialize failed, m_device={}", (void*)m_device);
+        printf("[DLL] SetEffectTypeInternal: CreateEffect OK, effect=%s\n", newEffect->GetName());
+        fflush(stdout);
+        
+        if (!newEffect->Initialize(m_device.Get())) {
+            printf("[DLL] SetEffectTypeInternal: Initialize FAILED, device=%p\n", m_device.Get());
+            fflush(stdout);
+            LOG_ERROR("SetEffectTypeInternal: Initialize failed, m_device={}", (void*)m_device.Get());
             return;
         }
+        
+        printf("[DLL] SetEffectTypeInternal: Initialize OK, switching effect\n");
+        fflush(stdout);
         
         newEffect->SetStrength(m_currentStrength);
         newEffect->SetNoiseIntensity(m_noiseIntensity);
@@ -245,6 +280,9 @@ public:
         newEffect->SetColor(m_tintColor[0], m_tintColor[1], m_tintColor[2], m_tintColor[3]);
         newEffect->SetOpacity(m_opacity);  // Restore opacity on effect switch
         m_effect = std::move(newEffect);
+        
+        printf("[DLL] SetEffectTypeInternal: SUCCESS, now using type=%d\n", type);
+        fflush(stdout);
         LOG_INFO("SetEffectTypeInternal: Successfully switched to type {}", type);
     }
     
@@ -278,6 +316,7 @@ public:
 
     void SetNoiseIntensity(float intensity) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        LOG_INFO("SetNoiseIntensity: window=%p, hwnd=%p, intensity=%.3f", this, m_hwnd, intensity);
         m_noiseIntensity = intensity;
         if (m_effect) m_effect->SetNoiseIntensity(intensity);
     }
@@ -296,6 +335,7 @@ public:
 
     void SetNoiseType(int type) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        LOG_INFO("SetNoiseType: window=%p, hwnd=%p, type=%d", this, m_hwnd, type);
         m_noiseType = type;
         if (m_effect) m_effect->SetNoiseType(type);
     }
@@ -358,13 +398,47 @@ public:
 
 private:
     bool InitializeGraphicsBasics() {
-        m_device = BlurSystem::Instance().GetDevice();
-        if (!m_device) {
-            LOG_ERROR("D3D11 Device not available from BlurSystem.");
+        // Create independent D3D11 Device & Context for this window to prevent threading conflicts
+        D3D_FEATURE_LEVEL featureLevels[] = {
+            D3D_FEATURE_LEVEL_11_1,
+            D3D_FEATURE_LEVEL_11_0,
+        };
+        UINT createFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#ifdef _DEBUG
+        createFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+        D3D_FEATURE_LEVEL featureLevel;
+        HRESULT hr = D3D11CreateDevice(
+            nullptr,                    // Adapter (Default)
+            D3D_DRIVER_TYPE_HARDWARE,
+            nullptr,                    // No software rasterizer
+            createFlags,
+            featureLevels, ARRAYSIZE(featureLevels),
+            D3D11_SDK_VERSION,
+            m_device.ReleaseAndGetAddressOf(),
+            &featureLevel,
+            m_context.ReleaseAndGetAddressOf()
+        );
+
+        if (FAILED(hr)) {
+            // Retry without debug layer if it failed
+            createFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
+            hr = D3D11CreateDevice(
+                nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createFlags,
+                featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+                m_device.ReleaseAndGetAddressOf(),
+                &featureLevel,
+                m_context.ReleaseAndGetAddressOf()
+            );
+        }
+
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to create independent D3D11 device: 0x%08X", hr);
             return false;
         }
-        m_context.Reset();
-        m_device->GetImmediateContext(m_context.GetAddressOf());
+        
+        LOG_INFO("Created independent D3D11 Device (%p) & Context (%p)", m_device.Get(), m_context.Get());
         
         m_width = m_options.bounds.right - m_options.bounds.left;
         m_height = m_options.bounds.bottom - m_options.bounds.top;
@@ -381,9 +455,9 @@ private:
         LOG_INFO("Initializing subsystems...");
 
         // 1. Initialize capture
-        m_capture = SubsystemFactory::CreateCapture(CaptureType::Auto);
+        m_capture = SubsystemFactory::CreateCapture(m_options.captureMethod);
         if (m_capture) {
-            if (!m_capture->Initialize(m_device)) {
+            if (!m_capture->Initialize(m_device.Get())) {
                 LOG_ERROR("Failed to initialize capture subsystem.");
                 m_capture.reset();
             } else {
@@ -394,7 +468,7 @@ private:
         // 2. Initialize effect
         m_effect = SubsystemFactory::CreateEffect(EffectType::Gaussian);
         if (m_effect) {
-            if (!m_effect->Initialize(m_device)) {
+            if (!m_effect->Initialize(m_device.Get())) {
                 LOG_ERROR("Failed to initialize Gaussian effect.");
                 m_effect.reset();
             } else {
@@ -404,7 +478,7 @@ private:
         
         // 3. Initialize presenter
         PresenterType presenterType = m_useDirectComp ? PresenterType::DirectComp : PresenterType::ULW;
-        auto presenter = SubsystemFactory::CreatePresenter(presenterType, m_hwnd, m_device);
+        auto presenter = SubsystemFactory::CreatePresenter(presenterType, m_hwnd, m_device.Get());
         
         if (!presenter && m_useDirectComp) {
             LOG_WARN("DirectComp presenter failed. Falling back to ULW...");
@@ -421,7 +495,7 @@ private:
                 LOG_INFO("Switched window style to WS_EX_LAYERED for fallback.");
             }
 
-            presenter = SubsystemFactory::CreatePresenter(PresenterType::ULW, m_hwnd, m_device);
+            presenter = SubsystemFactory::CreatePresenter(PresenterType::ULW, m_hwnd, m_device.Get());
         }
         
         if (presenter) {
@@ -754,7 +828,7 @@ private:
     RECT m_pendingBounds = {};
 
     // Graphics resources
-    ID3D11Device* m_device = nullptr;
+    ComPtr<ID3D11Device> m_device;
     ComPtr<ID3D11DeviceContext> m_context;
     ComPtr<ID3D11Texture2D> m_outputTexture;
     ComPtr<ID3D11ShaderResourceView> m_outputSRV;

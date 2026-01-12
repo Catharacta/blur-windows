@@ -10,6 +10,27 @@ static std::string g_lastError;
 
 extern "C" {
 
+static CaptureType FromCaptureMethodC(BlurCaptureMethod method) {
+    printf("[DLL] FromCaptureMethodC: Input=%d\n", (int)method);
+    switch (method) {
+        case BLUR_CAPTURE_DXGI: 
+            printf("[DLL] FromCaptureMethodC: Returning DXGI\n");
+            return CaptureType::DXGI;
+        case BLUR_CAPTURE_WGC:  
+            printf("[DLL] FromCaptureMethodC: Returning WGC\n");
+            return CaptureType::WGC;
+        case BLUR_CAPTURE_MAGNIFICATION: // 3
+            printf("[DLL] FromCaptureMethodC: Returning Magnification\n");
+            return CaptureType::Magnification; 
+        case BLUR_CAPTURE_AUTO: 
+            printf("[DLL] FromCaptureMethodC: Returning Auto\n");
+            return CaptureType::Auto;
+        default: 
+            printf("[DLL] FromCaptureMethodC: Unknown input %d, returning Auto\n", (int)method);
+            return CaptureType::Auto;
+    }
+}
+
 BLURWINDOW_API BlurSystemHandle blur_init(const BlurSystemOptionsC* opts) {
     BlurSystemOptions options = {};
     
@@ -17,7 +38,7 @@ BLURWINDOW_API BlurSystemHandle blur_init(const BlurSystemOptionsC* opts) {
         options.enableLogging = (opts->enableLogging != 0);
         options.logPath = opts->logPath;
         options.defaultPreset = static_cast<QualityPreset>(opts->defaultPreset);
-        options.captureMethod = static_cast<CaptureType>(opts->captureMethod);
+        options.captureMethod = FromCaptureMethodC(opts->captureMethod);
     }
 
     if (!BlurSystem::Instance().Initialize(options)) {
@@ -48,6 +69,8 @@ BLURWINDOW_API BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* o
     options.bounds.bottom = opts->bounds.bottom;
     options.topMost = (opts->topMost != 0);
     options.clickThrough = (opts->clickThrough != 0);
+    options.clickThrough = (opts->clickThrough != 0);
+    options.captureMethod = FromCaptureMethodC(opts->captureMethod);
 
     auto window = BlurSystem::Instance().CreateBlurWindow(options.owner, options);
     if (!window) {
@@ -119,7 +142,7 @@ BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const Blur
 BLURWINDOW_API BlurErrorCode blur_set_capture_method(BlurWindowHandle window, BlurCaptureMethod method) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     auto* w = reinterpret_cast<BlurWindow*>(window);
-    w->SetCaptureMethod(static_cast<CaptureType>(method));
+    w->SetCaptureMethod(FromCaptureMethodC(method));
     return BLUR_OK;
 }
 
