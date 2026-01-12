@@ -43,7 +43,8 @@ typedef enum {
 typedef enum {
     BLUR_CAPTURE_AUTO = 0,               ///< Auto-select (WGC if available, else DXGI).
     BLUR_CAPTURE_DXGI = 1,               ///< Desktop Duplication API (Windows 8+).
-    BLUR_CAPTURE_WGC = 2                 ///< Windows Graphics Capture (Windows 10 1803+).
+    BLUR_CAPTURE_WGC = 2,                ///< Windows Graphics Capture (Windows 10 1803+).
+    BLUR_CAPTURE_MAGNIFICATION = 3       ///< Windows Magnification API.
 } BlurCaptureMethod;
 
 

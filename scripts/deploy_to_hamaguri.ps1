@@ -13,7 +13,7 @@ Write-Host "Tauri libs: $TAURI_LIBS_DIR"
 # 1. Build Release
 Write-Host "`n[1/4] Building Release configuration..." -ForegroundColor Yellow
 Set-Location $SOURCE_DIR
-cmake --build build --config Release --target blurwindow
+cmake --build build --config Release --target blurwindow --clean-first
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed!"

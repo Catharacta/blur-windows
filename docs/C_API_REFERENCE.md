@@ -39,6 +39,7 @@ API関数の戻り値。
 | 0 | `BLUR_CAPTURE_AUTO` | 自動選択 (WGC優先、非対応環境ではDXGI) |
 | 1 | `BLUR_CAPTURE_DXGI` | Desktop Duplication API (Windows 8+) |
 | 2 | `BLUR_CAPTURE_WGC` | Windows Graphics Capture (Windows 10 1803+、クロスGPU対応) |
+| 3 | `BLUR_CAPTURE_MAGNIFICATION` | Windows Magnification API (自己除外対応、Obs等で録画可能) |
 
 ### 構造体
 #### `BlurRect`
@@ -165,7 +166,8 @@ BLURWINDOW_API BlurErrorCode blur_set_capture_method(BlurWindowHandle window, Bl
 |---|---|
 | `BLUR_CAPTURE_AUTO` | WGCが利用可能な場合はWGC、そうでなければDXGIを使用 |
 | `BLUR_CAPTURE_DXGI` | Desktop Duplication API。同一GPU上のモニターのみ対応 |
-| `BLUR_CAPTURE_WGC` | Windows Graphics Capture。クロスGPUキャプチャに対応 |
+| `BLUR_CAPTURE_WGC` | Windows Graphics Capture。クロスGPUキャプチャに対応 (高速) |
+| `BLUR_CAPTURE_MAGNIFICATION` | Magnification API。**自己除外対応**。OBS等でウィンドウを表示させたい場合に推奨 |
 
 > [!NOTE]
 > キャプチャ方式を変更すると、キャプチャセッションが再起動されます。

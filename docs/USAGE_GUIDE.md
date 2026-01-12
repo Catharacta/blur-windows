@@ -70,6 +70,12 @@ version 0.1.0以降、BlurWindowは2つのキャプチャ方式をサポート�
 2.  **Windows Graphics Capture (WGC)**:
     *   Windows 10 Version 1803 (April 2018 Update) 以降で利用可能。
     *   **メリット**: クロスGPUキャプチャを完全にサポートしています。どのモニターにウィンドウがあっても正しくブラーされます。
+    *   **備考**: `SetWindowDisplayAffinity(WDA_NONE)`で外部ツールにウィンドウを表示すると、自身をキャプチャして無限ループ（合わせ鏡）が発生します。
+
+3.  **Windows Magnification API**:
+    *   **特徴**: OSの拡大鏡APIを利用。
+    *   **メリット (自己除外)**: ブラーウィンドウ自身をキャプチャ対象から**完全に除外**できます。
+    *   **用途**: OBSなどで「ウィンドウキャプチャ」を行いたい場合に最適です。ループを防ぎつつ、外部ツールにはブラーウィンドウを表示できます。
 
 ### 自動選択 (Auto Mode)
 
@@ -105,6 +111,35 @@ version 0.1.0以降、BlurWindowは2つのキャプチャ方式をサポート�
 `blur_set_capture_method` 関数を使用して、明示的にキャプチャ方式を指定することも可能です。
 
 ```c
-// 0=Auto, 1=DXGI, 2=WGC
-blur_set_capture_method(window, 2); 
+// 0=Auto, 1=DXGI, 2=WGC, 3=Magnification
+blur_set_capture_method(window, 3); 
+```
+
+### Tauri / Rust でのキャプチャ方式切り替え
+
+Tauri からキャプチャ方式を指定する場合は、`BlurWindowOptionsC` 構造体の `capture_method` フィールドを設定するか、初期化後にコマンド経由で更新します。
+
+**`start_blur` コマンドの実装例:**
+
+```rust
+#[tauri::command]
+fn start_blur(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BlurState>,
+    capture_method: Option<i32>, // 0=Auto, 1=DXGI, 2=WGC, 3=Magnification
+) -> Result<(), String> {
+    // ...
+    let opts = BlurWindowOptionsC {
+        // ...
+        capture_method: capture_method.unwrap_or(0), 
+    };
+    // ...
+}
+```
+
+**Frontend (JavaScript) からの呼び出し例:**
+
+```javascript
+// 3 = Magnification (OBS等でループを回避したい場合)
+invoke("start_blur", { captureMethod: 3 });
 ```

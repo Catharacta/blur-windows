@@ -39,6 +39,7 @@ Capture method selection.
 | 0 | `BLUR_CAPTURE_AUTO` | Auto-select (WGC preferred, fallback to DXGI) |
 | 1 | `BLUR_CAPTURE_DXGI` | Desktop Duplication API (Windows 8+) |
 | 2 | `BLUR_CAPTURE_WGC` | Windows Graphics Capture (Windows 10 1803+, cross-GPU capable) |
+| 3 | `BLUR_CAPTURE_MAGNIFICATION` | Windows Magnification API (Self-exclusion supported, capturable by OBS) |
 
 ### Structures
 #### `BlurRect`
@@ -165,7 +166,8 @@ Changes the capture method.
 |---|---|
 | `BLUR_CAPTURE_AUTO` | Uses WGC if available, otherwise falls back to DXGI |
 | `BLUR_CAPTURE_DXGI` | Desktop Duplication API. Only supports monitors on the same GPU |
-| `BLUR_CAPTURE_WGC` | Windows Graphics Capture. Supports cross-GPU capture |
+| `BLUR_CAPTURE_WGC` | Windows Graphics Capture. Supports cross-GPU capture (Fast) |
+| `BLUR_CAPTURE_MAGNIFICATION` | Magnification API. **Differs by supporting self-exclusion**. Recommended for broadcasting via OBS |
 
 > [!NOTE]
 > Changing the capture method will restart the capture session.

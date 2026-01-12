@@ -455,7 +455,7 @@ private:
         LOG_INFO("Initializing subsystems...");
 
         // 1. Initialize capture
-        m_capture = SubsystemFactory::CreateCapture(CaptureType::Auto);
+        m_capture = SubsystemFactory::CreateCapture(m_options.captureMethod);
         if (m_capture) {
             if (!m_capture->Initialize(m_device.Get())) {
                 LOG_ERROR("Failed to initialize capture subsystem.");

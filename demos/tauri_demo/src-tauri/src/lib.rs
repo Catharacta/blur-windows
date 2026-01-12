@@ -72,6 +72,7 @@ fn start_blur(
     state: tauri::State<'_, BlurState>,
     effect_type: Option<i32>,
     bounds: Option<(i32, i32, i32, i32)>,
+    capture_method: Option<i32>, // New argument
 ) -> Result<(), String> {
     let mut sys_lock = state.sys.lock().unwrap();
     let mut window_lock = state.window.lock().unwrap();
@@ -123,7 +124,7 @@ fn start_blur(
             },
             top_most: 1,
             click_through: 0,
-            capture_method: 0, // Auto
+            capture_method: capture_method.unwrap_or(0), // Use provided method or Auto
         };
 
         // Passing null as owner for standalone window

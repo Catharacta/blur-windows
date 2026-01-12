@@ -23,7 +23,7 @@ OS標準の Acrylic や Mica よりも自由度の高いブラー、ティント
 
 - **言語**: C++17
 - **グラフィックスAPI**: Direct3D 11 / HLSL
-- **キャプチャ**: DXGI Desktop Duplication API
+- **キャプチャ**: DXGI Desktop Duplication / Windows Graphics Capture / Magnification API (OBS等での合わせ鏡回避に対応)
 - **表示**: DirectComposition / Layered Window (UpdateLayeredWindow)
 
 ## クイックスタート (C++)

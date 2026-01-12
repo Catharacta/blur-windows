@@ -68,6 +68,12 @@ Since version 0.1.0, BlurWindow supports two capture methods:
 2.  **Windows Graphics Capture (WGC)**:
     *   Available on Windows 10 Version 1803 (April 2018 Update) and later.
     *   **Benefit**: Fully supports cross-GPU capture. Windows can be blurred correctly regardless of which monitor they are on.
+    *   **Note**: If you display the window to external tools using `SetWindowDisplayAffinity(WDA_NONE)`, a recursive loop (infinite mirror effect) will occur as it captures itself.
+
+3.  **Windows Magnification API**:
+    *   **Feature**: Uses the OS Magnification API.
+    *   **Benefit (Self-Exclusion)**: Completely **excludes** the blur window itself from the capture.
+    *   **Usage**: Ideal when you want to capture the window using OBS "Window Capture". It displays the blur window to external tools while preventing the infinite mirror loop.
 
 ### Auto Mode
 
@@ -103,6 +109,35 @@ This "Per-Window Device" architecture prevents conflicts in drawing commands and
 You can explicitly set the capture method using the `blur_set_capture_method` function.
 
 ```c
-// 0=Auto, 1=DXGI, 2=WGC
-blur_set_capture_method(window, 2); 
+// 0=Auto, 1=DXGI, 2=WGC, 3=Magnification
+blur_set_capture_method(window, 3); 
+```
+
+### Switching Capture Methods in Tauri / Rust
+
+To verify specific modes or avoid loops in OBS (using Magnification), you can explicitly set the capture method. Pass it to the `BlurWindowOptionsC` struct or update it via command.
+
+**Example `start_blur` command implementation:**
+
+```rust
+#[tauri::command]
+fn start_blur(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BlurState>,
+    capture_method: Option<i32>, // 0=Auto, 1=DXGI, 2=WGC, 3=Magnification
+) -> Result<(), String> {
+    // ...
+    let opts = BlurWindowOptionsC {
+        // ...
+        capture_method: capture_method.unwrap_or(0), 
+    };
+    // ...
+}
+```
+
+**Invoking from Frontend (JavaScript):**
+
+```javascript
+// 3 = Magnification (Recommended for OBS loop avoidance)
+invoke("start_blur", { captureMethod: 3 });
 ```

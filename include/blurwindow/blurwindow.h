@@ -46,7 +46,8 @@ enum class QualityPreset {
 enum class CaptureType {
     Auto,           // Auto-select (WGC if available, else DXGI)
     DXGI,           // DXGI Desktop Duplication
-    WGC             // Windows.Graphics.Capture (cross-GPU capable)
+    WGC,            // Windows.Graphics.Capture (cross-GPU capable)
+    Magnification   // Windows Magnification API (supports exclusion)
 };
 
 /// Window creation options
