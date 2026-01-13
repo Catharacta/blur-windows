@@ -57,6 +57,7 @@ struct WindowOptions {
     bool topMost = true;        ///< Always on top
     bool clickThrough = true;   ///< Click-through window
     CaptureType captureMethod = CaptureType::Auto; ///< Capture method preference
+    bool allowCapture = false;
 };
 
 /// System initialization options

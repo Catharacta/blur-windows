@@ -71,6 +71,7 @@ typedef struct {
     int32_t topMost;                     ///< 1 to stay on top of other windows.
     int32_t clickThrough;                ///< 1 to allow mouse clicks to pass through.
     BlurCaptureMethod captureMethod;     ///< Capture method preference (0=Auto).
+    int32_t allowCapture;                ///< 0=Exclude (default), 1=Allow.
 } BlurWindowOptionsC;
 
 #ifndef BLURWINDOW_API

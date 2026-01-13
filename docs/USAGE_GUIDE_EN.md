@@ -141,3 +141,15 @@ fn start_blur(
 // 3 = Magnification (Recommended for OBS loop avoidance)
 invoke("start_blur", { captureMethod: 3 });
 ```
+
+### Recording with OBS (`allowCapture`)
+
+By default, the blur window uses `WDA_EXCLUDEFROMCAPTURE`, making it invisible to OBS window capture.
+To allow recording, set `allowCapture: 1` (true).
+
+**Recommended Settings**:
+*   `captureMethod: 3` (Magnification)
+*   `allowCapture: 1` (True)
+
+This combination uses the Magnification API to "exclude itself" from the capture source, allowing the window to appear in OBS without causing an infinite mirror loop.
+*Note: Using `allowCapture: 1` with `WGC` (2) will cause an infinite mirror loop.*

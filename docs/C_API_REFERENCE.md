@@ -64,6 +64,7 @@ API関数の戻り値。
 | `topMost` | `int32_t` | 常に最前面に表示 (0: 無効, 1: 有効) |
 | `clickThrough` | `int32_t` | クリックを背面に透過 (0: 無効, 1: 有効) |
 | `captureMethod` | `BlurCaptureMethod` | キャプチャ方式 (0=Auto) |
+| `allowCapture` | `int32_t` | 0: 外部キャプチャ除外 (デフォルト), 1: 許可 (OBS等に表示) |
 
 ---
 
