@@ -25,6 +25,7 @@ struct BlurWindowOptionsC {
     top_most: i32,
     click_through: i32,
     capture_method: i32,
+    allow_capture: i32,
 }
 
 extern "C" {
@@ -73,6 +74,7 @@ fn start_blur(
     effect_type: Option<i32>,
     bounds: Option<(i32, i32, i32, i32)>,
     capture_method: Option<i32>, // New argument
+    allow_capture: Option<bool>, // New argument
 ) -> Result<(), String> {
     let mut sys_lock = state.sys.lock().unwrap();
     let mut window_lock = state.window.lock().unwrap();
@@ -125,6 +127,7 @@ fn start_blur(
             top_most: 1,
             click_through: 0,
             capture_method: capture_method.unwrap_or(0), // Use provided method or Auto
+            allow_capture: if allow_capture.unwrap_or(false) { 1 } else { 0 },
         };
 
         // Passing null as owner for standalone window

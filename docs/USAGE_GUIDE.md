@@ -143,3 +143,15 @@ fn start_blur(
 // 3 = Magnification (OBS等でループを回避したい場合)
 invoke("start_blur", { captureMethod: 3 });
 ```
+
+### OBS等での録画について (`allowCapture`)
+
+デフォルトでは、ブラーウィンドウは `WDA_EXCLUDEFROMCAPTURE` により、OBS 等のウィンドウキャプチャには映りません（透明になります）。
+録画を行いたい場合は、`allowCapture: 1` (true) を指定してください。
+
+**推奨設定**:
+*   `captureMethod: 3` (Magnification)
+*   `allowCapture: 1` (True)
+
+これにより、Magnification API の機能で「自分自身を除外」してキャプチャするため、OBS に映りつつ、無限ループ（合わせ鏡）を回避できます。
+※ `WGC` (2) で `allowCapture: 1` にすると、合わせ鏡が発生するため注意してください。

@@ -636,7 +636,12 @@ private:
         // Exclude blur window from screen capture (Windows 10 2004+)
         // This prevents infinite recursion where the blur window captures itself
         if (m_hwnd) {
-            SetWindowDisplayAffinity(m_hwnd, WDA_EXCLUDEFROMCAPTURE);
+            if (m_options.allowCapture) {
+                SetWindowDisplayAffinity(m_hwnd, WDA_NONE);
+                LOG_INFO("Allow Capture ON: Window can be captured by external tools.");
+            } else {
+                SetWindowDisplayAffinity(m_hwnd, WDA_EXCLUDEFROMCAPTURE);
+            }
             
             // Log window creation details for multi-monitor debugging
             RECT actualRect;

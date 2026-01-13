@@ -71,6 +71,7 @@ BLURWINDOW_API BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* o
     options.clickThrough = (opts->clickThrough != 0);
     options.clickThrough = (opts->clickThrough != 0);
     options.captureMethod = FromCaptureMethodC(opts->captureMethod);
+    options.allowCapture = (opts->allowCapture != 0);
 
     auto window = BlurSystem::Instance().CreateBlurWindow(options.owner, options);
     if (!window) {
