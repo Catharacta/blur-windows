@@ -1,12 +1,15 @@
 #include "MagnificationCapture.h"
 #include "../core/Logger.h"
 #include <wincodec.h> // For WIC pixel format GUIDs
+#include <memory>
+#include <map> // Must be global
 
 namespace blurwindow {
 
-// Global or static map to retrieve instance from HWND if GWLP_USERDATA doesn't work on Mag window
-// But usually GWLP_USERDATA works on any window we created or own.
-// Magnifier window is created by us with "Magnifier" class.
+// Global map to retrieve instance from HWND
+// This is necessary because GetWindowLongPtr/GetProp might fail on system-controlled Magnifier windows
+static std::map<HWND, MagnificationCapture*> g_instanceMap;
+static std::mutex g_mapMutex;
 
 MagnificationCapture::MagnificationCapture() {
 }
@@ -26,6 +29,12 @@ bool MagnificationCapture::Initialize(ID3D11Device* device) {
 }
 
 void MagnificationCapture::Shutdown() {
+    {
+        std::lock_guard<std::mutex> lock(g_mapMutex);
+        if (m_magHwnd) g_instanceMap.erase(m_magHwnd);
+        if (m_hostHwnd) g_instanceMap.erase(m_hostHwnd);
+    }
+
     if (m_magHwnd) {
         DestroyWindow(m_magHwnd);
         m_magHwnd = nullptr;
@@ -54,14 +63,14 @@ bool MagnificationCapture::CreateHostWindow() {
     wc.lpszClassName = L"BlurMagnificationHost";
     RegisterClassExW(&wc);
 
-    // Create a hidden host window (off-screen or just not visible?)
+    // Create a hidden host window (off-screen initially)
     // Magnification requires the window to be "visible" to system?
-    // We'll place it off-screen.
+    // We'll place it off-screen initially.
     m_hostHwnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT,
         L"BlurMagnificationHost",
         L"MagnificationHost",
-        WS_POPUP, // Visible but off-screen
+        WS_POPUP, // Visible style
         -32000, -32000, 10, 10,
         nullptr, nullptr, GetModuleHandleW(nullptr), nullptr
     );
@@ -71,9 +80,9 @@ bool MagnificationCapture::CreateHostWindow() {
     // It must be visible for its children to be visible/active
     ShowWindow(m_hostHwnd, SW_SHOWNA);
     
-    // Make it "visible" to the system by setting opacity to 255 (opaque)
-    // Even if it's off-screen, layered windows need this to be composited/active.
-    SetLayeredWindowAttributes(m_hostHwnd, 0, 255, LWA_ALPHA);
+    // Make it "visible" to the system but almost transparent
+    // Alpha 1/255 is practically invisible but ensures the window is treated as "visible" by composition
+    SetLayeredWindowAttributes(m_hostHwnd, 0, 1, LWA_ALPHA);
     
     // Exclude host from capture too
     SetWindowDisplayAffinity(m_hostHwnd, WDA_EXCLUDEFROMCAPTURE);
@@ -83,11 +92,6 @@ bool MagnificationCapture::CreateHostWindow() {
 
 bool MagnificationCapture::CreateMagnifierControl() {
     // Create the magnifier control as a child of the host
-    // The size will be updated in CaptureFrame
-    // WC_MAGNIFIER is usually "Magnifier" but on some systems it might be wide.
-    // However, since we are using explicit Wide API, we should check if WC_MAGNIFIERW is available or cast.
-    // Standard Magnification API defines WC_MAGNIFIER as L"Magnifier" or "Magnifier". 
-    // Safest is to use L"Magnifier" directly corresponding to the wide API.
     m_magHwnd = CreateWindowW(L"Magnifier", L"MagnifierWindow",
         WS_CHILD | WS_VISIBLE, // Must be visible
         0, 0, 100, 100,
@@ -104,8 +108,13 @@ bool MagnificationCapture::CreateMagnifierControl() {
         return false;
     }
 
-    // Store 'this' pointer in the Magnifier window for the callback
-    SetWindowLongPtr(m_magHwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+    // Store 'this' pointer in the global map for known HWNDs
+    {
+        std::lock_guard<std::mutex> lock(g_mapMutex);
+        g_instanceMap[m_magHwnd] = this;
+        g_instanceMap[m_hostHwnd] = this; // Also register host
+    }
+    printf("[DLL] Stored 'this' %p for Mag=%p, Host=%p in Global Map\n", this, m_magHwnd, m_hostHwnd);
 
     return true;
 }
@@ -113,8 +122,11 @@ bool MagnificationCapture::CreateMagnifierControl() {
 bool MagnificationCapture::InitOnRenderThread() {
     if (m_magInitialized) return true;
 
+    printf("[DLL] MagnificationCapture::InitOnRenderThread: ThreadID=%u\n", GetCurrentThreadId());
+
     if (!MagInitialize()) {
         LOG_ERROR("MagInitialize failed.");
+        printf("[DLL] MagInitialize failed. Error: %u\n", GetLastError());
         return false;
     }
 
@@ -122,16 +134,28 @@ bool MagnificationCapture::InitOnRenderThread() {
         LOG_ERROR("Failed to create host window for Magnification.");
         return false;
     }
+    printf("[DLL] HostWindow Created: %p\n", m_hostHwnd);
 
     if (!CreateMagnifierControl()) {
         LOG_ERROR("Failed to create magnifier control.");
         return false;
     }
+    printf("[DLL] MagnifierControl Created: %p\n", m_magHwnd);
     
+    // Apply filter initially
+    if (m_selfHwnd) {
+         bool ret = MagSetWindowFilterList(m_magHwnd, MW_FILTERMODE_EXCLUDE, 1, &m_selfHwnd);
+         printf("[DLL] MagSetWindowFilterList (Init): Hwnd=%p, Result=%d, Error=%u\n", m_selfHwnd, ret, GetLastError());
+    }
+
+    bool cbRet = MagSetImageScalingCallback(m_magHwnd, MagImageScalingCallback);
+    printf("[DLL] MagSetImageScalingCallback: Result=%d, Error=%u\n", cbRet, GetLastError());
+
     m_magInitialized = true;
     m_filterDirty = true; // Force filter application
     
     LOG_INFO("MagnificationCapture initialized on Render Thread.");
+    printf("[DLL] MagnificationCapture initialized successfully.\n");
     return true;
 }
 
@@ -161,29 +185,67 @@ BOOL CALLBACK MagnificationCapture::MagImageScalingCallback(
     RECT clipped,
     HRGN dirty
 ) {
-    // Get instance
-    auto* self = reinterpret_cast<MagnificationCapture*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
-    if (!self) return TRUE;
-
-    // Lock and copy data
-    // srcheader.width/height should match what we requested
-    // srcdata points to the bits
+    // Debug log for first callback hits
+    static int callbackCount = 0;
+    bool debug = (callbackCount < 5);
+    if (debug) {
+        printf("[DLL] MagImageScalingCallback Hit! Count=%d, Size=%dx%d\n", callbackCount++, srcheader.width, srcheader.height);
+    }
     
-    // Assume 32bpp (4 bytes per pixel)
+    // Silence warnings
+    (void)srcdata; (void)destdata; (void)destheader; (void)unclipped; (void)clipped; (void)dirty;
+
+    // Get instance from global map with parent chain lookup
+    MagnificationCapture* self = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_mapMutex);
+        HWND current = hwnd;
+        int depth = 0;
+        while (current && depth < 10) { // Limit depth just in case
+            auto it = g_instanceMap.find(current);
+            if (it != g_instanceMap.end()) {
+                self = it->second;
+                break;
+            }
+            current = GetParent(current);
+            depth++;
+        }
+        if (debug && !self) {
+             printf("[DLL] Map lookup failed for HWND %p (Depth=%d)\n", hwnd, depth);
+        }
+    }
+
+    if (!self) {
+        // printf("[DLL] Callback: Self is NULL (Map lookup failed for HWND %p)\n", hwnd);
+        return TRUE;
+    }
+    if (debug) printf("[DLL] Callback: Self=%p found for HWND %p\n", self, hwnd);
+
+    if (!srcdata) {
+         printf("[DLL] Callback: srcdata is NULL!\n");
+         return TRUE;
+    }
+    
     size_t size = srcheader.width * srcheader.height * 4;
     
-    std::lock_guard<std::mutex> lock(self->m_bufferMutex);
+    if (debug) printf("[DLL] Callback: Locking mutex...\n");
+    std::unique_lock<std::mutex> lock(self->m_bufferMutex, std::defer_lock);
+    lock.lock(); // Try standard lock first
     
+    if (debug) printf("[DLL] Callback: Resizing buffer to %llu...\n", size);
     if (self->m_pixelBuffer.size() != size) {
         self->m_pixelBuffer.resize(size);
     }
     
+    if (debug) printf("[DLL] Callback: Memcpy...\n");
     memcpy(self->m_pixelBuffer.data(), srcdata, size);
+    
     self->m_bufferWidth = srcheader.width;
     self->m_bufferHeight = srcheader.height;
     self->m_hasNewFrame = true;
 
-    return TRUE; // Return TRUE to continue
+    if (debug) printf("[DLL] Callback: Done.\n");
+    return TRUE; 
 }
 
 bool MagnificationCapture::EnsureTexture(int width, int height) {
@@ -202,7 +264,7 @@ bool MagnificationCapture::EnsureTexture(int width, int height) {
     desc.Height = height;
     desc.MipLevels = 1;
     desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; // Assuming source is BGRA compatible
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; 
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -225,23 +287,27 @@ bool MagnificationCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** ou
     // Update filter if dirty (must be done on owning thread)
     if (m_filterDirty && m_magHwnd && m_selfHwnd) {
         if (MagSetWindowFilterList(m_magHwnd, MW_FILTERMODE_EXCLUDE, 1, &m_selfHwnd)) {
-            // LOG_INFO("Updated exclusion filter list.");
+             // Success
         } else {
             LOG_ERROR("MagSetWindowFilterList failed in CaptureFrame.");
+            printf("[DLL] MagSetWindowFilterList FAILED: Error=%u\n", GetLastError());
         }
         m_filterDirty = false;
     }
 
-    if (!m_magHwnd || !m_device) return false;
+    if (!m_magHwnd || !m_device) {
+        printf("[DLL] CaptureFrame: Pre-check failed. MagHwnd=%p, Device=%p\n", m_magHwnd, m_device);
+        return false;
+    }
 
     int width = region.right - region.left;
     int height = region.bottom - region.top;
     if (width <= 0 || height <= 0) return false;
 
     // 1. Resize Host and Magnifier windows
-    // Resize Host first to ensure it contains the child (if clipping applies)
-    SetWindowPos(m_hostHwnd, nullptr, 0, 0, width, height, 
-        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    // Move Host to cover the capture area to ensure it's "on screen" for painting
+    SetWindowPos(m_hostHwnd, nullptr, region.left, region.top, width, height, 
+        SWP_NOZORDER | SWP_NOACTIVATE); 
 
     // Resize Magnifier to match
     SetWindowPos(m_magHwnd, nullptr, 0, 0, width, height, 
@@ -256,17 +322,10 @@ bool MagnificationCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** ou
 
     // 3. Trigger update
     // Force a paint to trigger the callback
-    // Update: InvalidateRect + UpdateWindow usually works
     InvalidateRect(m_magHwnd, nullptr, TRUE);
-    // UpdateWindow(m_magHwnd); 
-    // Or pump messages if we are on the same thread that created the window
     
-    // Since we created the window on THIS thread (in Initialize), we must pump messages
+    // Pump messages
     MSG msg;
-    // Process all pending messages to ensure WM_PAINT is handled by the Mag control
-    // We use PeekMessage to clear the queue, but we might need to wait?
-    // MagSetImageScalingCallback is called during WM_PAINT processing by the Mag control.
-    // So pumping messages is essential.
     while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
@@ -286,10 +345,7 @@ bool MagnificationCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** ou
                 );
                 
                 *outTexture = m_capturedTexture.Get();
-                m_hasNewFrame = false; // Reset flag? Or keep the last frame?
-                // Probably reset to ensure we don't return stale data if next update fails?
-                // But returning stale data is better than nothing.
-                // Keeping it is fine.
+                m_hasNewFrame = false; 
                 return true;
             }
         }
@@ -306,7 +362,7 @@ bool MagnificationCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** ou
 
 // Factory function
 std::unique_ptr<ICaptureSubsystem> CreateMagnificationCapture() {
-    return std::make_unique<MagnificationCapture>();
+    return std::unique_ptr<ICaptureSubsystem>(new MagnificationCapture());
 }
 
 } // namespace blurwindow

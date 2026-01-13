@@ -61,6 +61,17 @@ BLURWINDOW_API BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* o
         return nullptr;
     }
 
+    printf("[DLL] blur_create_window called. Struct Size: %llu\n", sizeof(BlurWindowOptionsC));
+    printf("[DLL] Options: owner=%p, bounds=(%d,%d,%d,%d), topMost=%d, clickThrough=%d, captureMethod=%d, allowCapture=%d\n",
+        opts->owner,
+        opts->bounds.left, opts->bounds.top, opts->bounds.right, opts->bounds.bottom,
+        opts->topMost,
+        opts->clickThrough,
+        (int)opts->captureMethod,
+        opts->allowCapture
+    );
+    fflush(stdout);
+
     WindowOptions options = {};
     options.owner = static_cast<HWND>(owner);
     options.bounds.left = opts->bounds.left;

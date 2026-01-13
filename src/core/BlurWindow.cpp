@@ -247,30 +247,16 @@ public:
         EffectType effectType = static_cast<EffectType>(type);
         LOG_DEBUG("SetEffectTypeInternal: switching to type {}", type);
         
-        // Debug output to terminal
-        printf("[DLL] SetEffectTypeInternal: type=%d, window=%p, hwnd=%p\n", type, this, m_hwnd);
-        fflush(stdout);
-        
         auto newEffect = SubsystemFactory::CreateEffect(effectType);
         if (!newEffect) {
-            printf("[DLL] SetEffectTypeInternal: CreateEffect FAILED for type %d\n", type);
-            fflush(stdout);
             LOG_ERROR("SetEffectTypeInternal: CreateEffect failed for type {}", type);
             return;
         }
         
-        printf("[DLL] SetEffectTypeInternal: CreateEffect OK, effect=%s\n", newEffect->GetName());
-        fflush(stdout);
-        
         if (!newEffect->Initialize(m_device.Get())) {
-            printf("[DLL] SetEffectTypeInternal: Initialize FAILED, device=%p\n", m_device.Get());
-            fflush(stdout);
             LOG_ERROR("SetEffectTypeInternal: Initialize failed, m_device={}", (void*)m_device.Get());
             return;
         }
-        
-        printf("[DLL] SetEffectTypeInternal: Initialize OK, switching effect\n");
-        fflush(stdout);
         
         newEffect->SetStrength(m_currentStrength);
         newEffect->SetNoiseIntensity(m_noiseIntensity);
@@ -281,8 +267,6 @@ public:
         newEffect->SetOpacity(m_opacity);  // Restore opacity on effect switch
         m_effect = std::move(newEffect);
         
-        printf("[DLL] SetEffectTypeInternal: SUCCESS, now using type=%d\n", type);
-        fflush(stdout);
         LOG_INFO("SetEffectTypeInternal: Successfully switched to type {}", type);
     }
     
