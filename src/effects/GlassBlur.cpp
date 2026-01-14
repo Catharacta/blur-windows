@@ -162,8 +162,8 @@ bool GlassBlur::SetParameters(const char* json) {
     const char* paramStr = strstr(json, "\"param\"");
     if (paramStr) {
         float param = 0;
-        if (sscanf(paramStr, "\"param\": %f", &param) == 1 ||
-            sscanf(paramStr, "\"param\":%f", &param) == 1) {
+        if (sscanf_s(paramStr, "\"param\": %f", &param) == 1 ||
+            sscanf_s(paramStr, "\"param\":%f", &param) == 1) {
             m_blurRadius = param;
             m_dirty = true;
         }
@@ -178,6 +178,7 @@ std::string GlassBlur::GetParameters() const {
 }
 
 void GlassBlur::UpdateConstantBuffer(ID3D11DeviceContext* context) {
+    (void)context;
     // Already handled in Apply()
 }
 

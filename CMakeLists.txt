@@ -131,8 +131,8 @@ target_include_directories(blurwindow_static PUBLIC
 
 # Compile options
 if(MSVC)
-    target_compile_options(blurwindow PRIVATE /W4 /WX-)
-    target_compile_options(blurwindow_static PRIVATE /W4 /WX-)
+    target_compile_options(blurwindow PRIVATE /W4 /WX- /utf-8)
+    target_compile_options(blurwindow_static PRIVATE /W4 /WX- /utf-8)
     
     # Enable debug info in Release for profiling
     target_compile_options(blurwindow PRIVATE $<$<CONFIG:Release>:/Zi>)

@@ -138,7 +138,7 @@ public:
             m_capture->SetTargetMonitor(hMon);
         }
         
-        // D3Dリソースの再作成はRenderLoop内で安全に処理
+        //  D3Dリソースの再作成はRenderLoop内で安全に処理
         {
             std::lock_guard<std::mutex> lock(m_graphicsMutex);
             m_pendingBounds = bounds;
@@ -664,7 +664,7 @@ private:
             
             static bool firstFrameLogged = false;
             
-            // リサイズ要求の処理（RenderLoop内で安全にD3Dリソースを再作成）
+    //  リサイズ要求の処理（RenderLoop内で安全にD3Dリソースを再作成）
             if (m_resizeRequested.exchange(false)) {
                 m_options.bounds = m_pendingBounds;
                 m_width = m_pendingBounds.right - m_pendingBounds.left;

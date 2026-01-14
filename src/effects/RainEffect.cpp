@@ -520,6 +520,7 @@ void RainEffect::UpdateDrops(float deltaTime) {
 }
 
 void RainEffect::SpawnNewDrops(uint32_t width, uint32_t height) {
+    (void)width; (void)height;
     // Codrops-compatible spawning
     std::uniform_real_distribution<float> posX(0.0f, 1.0f);
     std::uniform_real_distribution<float> posY(-0.1f, 0.95f);
@@ -722,7 +723,7 @@ bool RainEffect::SetParameters(const char* json) {
     
     // Parse simple JSON parameters
     float intensity = 0.0f;
-    if (std::sscanf(json, "{\"intensity\": %f}", &intensity) == 1) {
+    if (sscanf_s(json, "{\"intensity\": %f}", &intensity) == 1) {
         m_rainIntensity = intensity;
         return true;
     }

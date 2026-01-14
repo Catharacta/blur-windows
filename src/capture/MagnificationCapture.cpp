@@ -114,7 +114,6 @@ bool MagnificationCapture::CreateMagnifierControl() {
         g_instanceMap[m_magHwnd] = this;
         g_instanceMap[m_hostHwnd] = this; // Also register host
     }
-    printf("[DLL] Stored 'this' %p for Mag=%p, Host=%p in Global Map\n", this, m_magHwnd, m_hostHwnd);
 
     return true;
 }
@@ -122,11 +121,8 @@ bool MagnificationCapture::CreateMagnifierControl() {
 bool MagnificationCapture::InitOnRenderThread() {
     if (m_magInitialized) return true;
 
-    printf("[DLL] MagnificationCapture::InitOnRenderThread: ThreadID=%u\n", GetCurrentThreadId());
-
     if (!MagInitialize()) {
         LOG_ERROR("MagInitialize failed.");
-        printf("[DLL] MagInitialize failed. Error: %u\n", GetLastError());
         return false;
     }
 
@@ -134,28 +130,22 @@ bool MagnificationCapture::InitOnRenderThread() {
         LOG_ERROR("Failed to create host window for Magnification.");
         return false;
     }
-    printf("[DLL] HostWindow Created: %p\n", m_hostHwnd);
 
     if (!CreateMagnifierControl()) {
         LOG_ERROR("Failed to create magnifier control.");
         return false;
     }
-    printf("[DLL] MagnifierControl Created: %p\n", m_magHwnd);
     
-    // Apply filter initially
     if (m_selfHwnd) {
-         bool ret = MagSetWindowFilterList(m_magHwnd, MW_FILTERMODE_EXCLUDE, 1, &m_selfHwnd);
-         printf("[DLL] MagSetWindowFilterList (Init): Hwnd=%p, Result=%d, Error=%u\n", m_selfHwnd, ret, GetLastError());
+         MagSetWindowFilterList(m_magHwnd, MW_FILTERMODE_EXCLUDE, 1, &m_selfHwnd);
     }
 
-    bool cbRet = MagSetImageScalingCallback(m_magHwnd, MagImageScalingCallback);
-    printf("[DLL] MagSetImageScalingCallback: Result=%d, Error=%u\n", cbRet, GetLastError());
+    MagSetImageScalingCallback(m_magHwnd, MagImageScalingCallback);
 
     m_magInitialized = true;
     m_filterDirty = true; // Force filter application
     
     LOG_INFO("MagnificationCapture initialized on Render Thread.");
-    printf("[DLL] MagnificationCapture initialized successfully.\n");
     return true;
 }
 
@@ -185,66 +175,60 @@ BOOL CALLBACK MagnificationCapture::MagImageScalingCallback(
     RECT clipped,
     HRGN dirty
 ) {
-    // Debug log for first callback hits
-    static int callbackCount = 0;
-    bool debug = (callbackCount < 5);
-    if (debug) {
-        printf("[DLL] MagImageScalingCallback Hit! Count=%d, Size=%dx%d\n", callbackCount++, srcheader.width, srcheader.height);
-    }
-    
     // Silence warnings
-    (void)srcdata; (void)destdata; (void)destheader; (void)unclipped; (void)clipped; (void)dirty;
+    (void)destdata; (void)destheader; (void)unclipped; (void)clipped; (void)dirty;
 
     // Get instance from global map with parent chain lookup
+    // Optimization: Cache result for this HWND to avoid loop
+    // But since g_instanceMap is guarded by mutex, we must be careful not to deadlock or complexify.
+    // Simple lookup is fast enough for map<HWND, MagnificationCapture*>.
+    // The loop (depth < 10) is the costly part.
+    // If we find a parent that matches, should we register the child?
+    // Yes, registering the child makes future lookups O(1).
+    
     MagnificationCapture* self = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_mapMutex);
-        HWND current = hwnd;
-        int depth = 0;
-        while (current && depth < 10) { // Limit depth just in case
-            auto it = g_instanceMap.find(current);
-            if (it != g_instanceMap.end()) {
-                self = it->second;
-                break;
+        auto it = g_instanceMap.find(hwnd);
+        if (it != g_instanceMap.end()) {
+            self = it->second;
+        } else {
+            // Not found, try parent chain
+            HWND current = hwnd;
+            int depth = 0;
+            while (current && depth < 10) {
+                auto pit = g_instanceMap.find(current);
+                if (pit != g_instanceMap.end()) {
+                    self = pit->second;
+                    // Cache this specific HWND for next time
+                    g_instanceMap[hwnd] = self; 
+                    break;
+                }
+                current = GetParent(current);
+                depth++;
             }
-            current = GetParent(current);
-            depth++;
-        }
-        if (debug && !self) {
-             printf("[DLL] Map lookup failed for HWND %p (Depth=%d)\n", hwnd, depth);
         }
     }
 
-    if (!self) {
-        // printf("[DLL] Callback: Self is NULL (Map lookup failed for HWND %p)\n", hwnd);
-        return TRUE;
-    }
-    if (debug) printf("[DLL] Callback: Self=%p found for HWND %p\n", self, hwnd);
+    if (!self) return TRUE;
 
-    if (!srcdata) {
-         printf("[DLL] Callback: srcdata is NULL!\n");
-         return TRUE;
-    }
-    
+    if (!srcdata) return TRUE;
+
+    // Assume 32bpp (4 bytes per pixel)
     size_t size = srcheader.width * srcheader.height * 4;
     
-    if (debug) printf("[DLL] Callback: Locking mutex...\n");
-    std::unique_lock<std::mutex> lock(self->m_bufferMutex, std::defer_lock);
-    lock.lock(); // Try standard lock first
+    std::lock_guard<std::mutex> lock(self->m_bufferMutex);
     
-    if (debug) printf("[DLL] Callback: Resizing buffer to %llu...\n", size);
     if (self->m_pixelBuffer.size() != size) {
         self->m_pixelBuffer.resize(size);
     }
     
-    if (debug) printf("[DLL] Callback: Memcpy...\n");
     memcpy(self->m_pixelBuffer.data(), srcdata, size);
     
     self->m_bufferWidth = srcheader.width;
     self->m_bufferHeight = srcheader.height;
     self->m_hasNewFrame = true;
 
-    if (debug) printf("[DLL] Callback: Done.\n");
     return TRUE; 
 }
 
@@ -290,13 +274,11 @@ bool MagnificationCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** ou
              // Success
         } else {
             LOG_ERROR("MagSetWindowFilterList failed in CaptureFrame.");
-            printf("[DLL] MagSetWindowFilterList FAILED: Error=%u\n", GetLastError());
         }
         m_filterDirty = false;
     }
 
     if (!m_magHwnd || !m_device) {
-        printf("[DLL] CaptureFrame: Pre-check failed. MagHwnd=%p, Device=%p\n", m_magHwnd, m_device);
         return false;
     }
 

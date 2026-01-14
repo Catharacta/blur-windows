@@ -27,7 +27,7 @@ public:
     void SetNoiseIntensity(float intensity) override { m_distortionStrength = intensity * 0.1f; }
     void SetNoiseScale(float scale) override { m_cellScale = scale; }
     void SetNoiseSpeed(float speed) override { m_animSpeed = speed; }
-    void SetNoiseType(int type) override { /* Not used */ }
+    void SetNoiseType(int /*type*/) override { /* Not used */ }
     void SetOpacity(float opacity) override { m_opacity = opacity; m_dirty = true; }
     void Update(float deltaTime) override { m_time += deltaTime * m_animSpeed; }
     bool SetParameters(const char* json) override;

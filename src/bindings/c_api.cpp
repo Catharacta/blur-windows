@@ -11,22 +11,16 @@ static std::string g_lastError;
 extern "C" {
 
 static CaptureType FromCaptureMethodC(BlurCaptureMethod method) {
-    printf("[DLL] FromCaptureMethodC: Input=%d\n", (int)method);
     switch (method) {
         case BLUR_CAPTURE_DXGI: 
-            printf("[DLL] FromCaptureMethodC: Returning DXGI\n");
             return CaptureType::DXGI;
         case BLUR_CAPTURE_WGC:  
-            printf("[DLL] FromCaptureMethodC: Returning WGC\n");
             return CaptureType::WGC;
         case BLUR_CAPTURE_MAGNIFICATION: // 3
-            printf("[DLL] FromCaptureMethodC: Returning Magnification\n");
             return CaptureType::Magnification; 
         case BLUR_CAPTURE_AUTO: 
-            printf("[DLL] FromCaptureMethodC: Returning Auto\n");
             return CaptureType::Auto;
         default: 
-            printf("[DLL] FromCaptureMethodC: Unknown input %d, returning Auto\n", (int)method);
             return CaptureType::Auto;
     }
 }
@@ -60,17 +54,6 @@ BLURWINDOW_API BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* o
         g_lastError = "Invalid parameters";
         return nullptr;
     }
-
-    printf("[DLL] blur_create_window called. Struct Size: %llu\n", sizeof(BlurWindowOptionsC));
-    printf("[DLL] Options: owner=%p, bounds=(%d,%d,%d,%d), topMost=%d, clickThrough=%d, captureMethod=%d, allowCapture=%d\n",
-        opts->owner,
-        opts->bounds.left, opts->bounds.top, opts->bounds.right, opts->bounds.bottom,
-        opts->topMost,
-        opts->clickThrough,
-        (int)opts->captureMethod,
-        opts->allowCapture
-    );
-    fflush(stdout);
 
     WindowOptions options = {};
     options.owner = static_cast<HWND>(owner);
