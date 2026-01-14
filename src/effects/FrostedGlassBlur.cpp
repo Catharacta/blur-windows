@@ -221,8 +221,8 @@ bool FrostedGlassBlur::SetParameters(const char* json) {
     const char* paramStr = strstr(json, "\"param\"");
     if (paramStr) {
         float param = 0;
-        if (sscanf(paramStr, "\"param\": %f", &param) == 1 ||
-            sscanf(paramStr, "\"param\":%f", &param) == 1) {
+        if (sscanf_s(paramStr, "\"param\": %f", &param) == 1 ||
+            sscanf_s(paramStr, "\"param\":%f", &param) == 1) {
             m_blurRadius = param;
             m_dirty = true;
         }

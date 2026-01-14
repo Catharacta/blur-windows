@@ -11,22 +11,16 @@ static std::string g_lastError;
 extern "C" {
 
 static CaptureType FromCaptureMethodC(BlurCaptureMethod method) {
-    printf("[DLL] FromCaptureMethodC: Input=%d\n", (int)method);
     switch (method) {
         case BLUR_CAPTURE_DXGI: 
-            printf("[DLL] FromCaptureMethodC: Returning DXGI\n");
             return CaptureType::DXGI;
         case BLUR_CAPTURE_WGC:  
-            printf("[DLL] FromCaptureMethodC: Returning WGC\n");
             return CaptureType::WGC;
         case BLUR_CAPTURE_MAGNIFICATION: // 3
-            printf("[DLL] FromCaptureMethodC: Returning Magnification\n");
             return CaptureType::Magnification; 
         case BLUR_CAPTURE_AUTO: 
-            printf("[DLL] FromCaptureMethodC: Returning Auto\n");
             return CaptureType::Auto;
         default: 
-            printf("[DLL] FromCaptureMethodC: Unknown input %d, returning Auto\n", (int)method);
             return CaptureType::Auto;
     }
 }
