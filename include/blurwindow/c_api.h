@@ -145,6 +145,14 @@ BLURWINDOW_API BlurErrorCode blur_set_preset(BlurWindowHandle window, BlurQualit
 BLURWINDOW_API BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const char* json_config);
 
 /**
+ * @brief Update effect parameters using JSON without recreating the pipeline.
+ * @param window Window handle.
+ * @param json_config JSON configuration.
+ * @return BLUR_OK on success.
+ */
+BLURWINDOW_API BlurErrorCode blur_update_parameters(BlurWindowHandle window, const char* json_config);
+
+/**
  * @brief Update the window bounds.
  * @param window Window handle.
  * @param bounds New rectangle (left, top, right, bottom).

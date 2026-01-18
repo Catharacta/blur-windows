@@ -189,6 +189,13 @@ public:
         return false;
     }
 
+    void UpdateEffectParameters(const std::string& jsonConfig) {
+        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        if (m_effect) {
+            m_effect->SetParameters(jsonConfig.c_str());
+        }
+    }
+
     void SetBlurStrength(float strength) {
         std::lock_guard<std::mutex> lock(m_graphicsMutex);
         m_currentStrength = strength;
@@ -881,6 +888,10 @@ bool BlurWindow::IsInitialized() const {
 
 bool BlurWindow::SetEffectPipeline(const std::string& jsonConfig) {
     return m_impl->SetEffectPipeline(jsonConfig);
+}
+
+void BlurWindow::UpdateEffectParameters(const std::string& jsonConfig) {
+    m_impl->UpdateEffectParameters(jsonConfig);
 }
 
 void BlurWindow::SetCaptureMethod(CaptureType type) {

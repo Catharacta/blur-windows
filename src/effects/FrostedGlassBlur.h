@@ -24,12 +24,12 @@ public:
     
     void SetStrength(float strength) override { m_strength = strength; m_dirty = true; }
     void SetColor(float r, float g, float b, float a) override;
-    void SetNoiseIntensity(float intensity) override { m_distortionStrength = intensity * 0.1f; }
-    void SetNoiseScale(float scale) override { m_cellScale = scale; }
-    void SetNoiseSpeed(float speed) override { m_animSpeed = speed; }
-    void SetNoiseType(int /*type*/) override { /* Not used */ }
+    void SetNoiseIntensity(float intensity) override { m_noiseIntensity = intensity; }
+    void SetNoiseScale(float scale) override { m_noiseScale = scale; }
+    void SetNoiseSpeed(float speed) override { m_noiseSpeed = speed; }
+    void SetNoiseType(int type) override { m_noiseType = type; }
     void SetOpacity(float opacity) override { m_opacity = opacity; m_dirty = true; }
-    void Update(float deltaTime) override { m_time += deltaTime * m_animSpeed; }
+    void Update(float deltaTime) override { m_time += deltaTime * m_noiseSpeed; }
     bool SetParameters(const char* json) override;
     std::string GetParameters() const override;
 
@@ -42,14 +42,20 @@ private:
     FullscreenRenderer m_fullscreenRenderer;
     bool m_rendererInitialized = false;
     
+    float m_blurRadius = 10.0f;
     float m_strength = 1.0f;
-    float m_opacity = 1.0f;
-    float m_blurRadius = 8.0f;
-    float m_distortionStrength = 0.02f;  // Voronoi distortion amount
-    float m_cellScale = 50.0f;           // Voronoi cell size
-    float m_animSpeed = 0.5f;
-    float m_tintColor[4] = { 0, 0, 0, 0 };
+    float m_distortionStrength = 0.02f; // Reverted to original default (was 5.0f)
+    float m_cellScale = 50.0f;          // Reverted to original default (was 10.0f)
     float m_time = 0.0f;
+    float m_opacity = 1.0f;
+    float m_tintColor[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+    
+    // Noise parameters
+    float m_noiseIntensity = 0.0f;
+    float m_noiseScale = 100.0f;
+    float m_noiseSpeed = 1.0f;
+    int m_noiseType = 0;
+    
     bool m_dirty = true;
 };
 

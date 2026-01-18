@@ -118,6 +118,15 @@ BLURWINDOW_API BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const ch
     return BLUR_OK;
 }
 
+BLURWINDOW_API BlurErrorCode blur_update_parameters(BlurWindowHandle window, const char* json_config) {
+    if (!window) return BLUR_ERROR_INVALID_HANDLE;
+    if (!json_config) return BLUR_ERROR_INVALID_PARAMETER;
+    
+    auto* w = reinterpret_cast<BlurWindow*>(window);
+    w->UpdateEffectParameters(json_config);
+    return BLUR_OK;
+}
+
 BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds) {
     if (!window) return BLUR_ERROR_INVALID_HANDLE;
     if (!bounds) return BLUR_ERROR_INVALID_PARAMETER;

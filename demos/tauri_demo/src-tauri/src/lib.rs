@@ -44,6 +44,7 @@ extern "C" {
     fn blur_set_strength(window: *mut std::ffi::c_void, strength: f32) -> i32;
     fn blur_set_blur_param(window: *mut std::ffi::c_void, param: f32) -> i32;
     fn blur_set_tint_color(window: *mut std::ffi::c_void, r: f32, g: f32, b: f32, a: f32) -> i32;
+    #[allow(dead_code)]
     fn blur_set_opacity(window: *mut std::ffi::c_void, opacity: f32) -> i32;
     fn blur_set_noise_intensity(window: *mut std::ffi::c_void, intensity: f32) -> i32;
     fn blur_set_noise_scale(window: *mut std::ffi::c_void, scale: f32) -> i32;
@@ -57,6 +58,12 @@ extern "C" {
     fn blur_set_rain_refraction(window: *mut std::ffi::c_void, strength: f32) -> i32;
     fn blur_set_rain_trail_length(window: *mut std::ffi::c_void, length: f32) -> i32;
     fn blur_set_rain_drop_size(window: *mut std::ffi::c_void, min_size: f32, max_size: f32) -> i32;
+
+    // New API for generic parameter update
+    fn blur_update_parameters(
+        window: *mut std::ffi::c_void,
+        json_config: *const std::ffi::c_char,
+    ) -> i32;
 }
 
 struct BlurState {
@@ -255,6 +262,39 @@ fn update_rain_parameters(
     }
 }
 
+#[tauri::command]
+fn update_frosted_parameters(
+    state: tauri::State<'_, BlurState>,
+    distortion: Option<f32>,
+    scale: Option<f32>,
+) {
+    let window_lock = state.window.lock().unwrap();
+    if let Some(window) = *window_lock {
+        unsafe {
+            // Construct JSON string: {"distortion": X.X, "scale": Y.Y}
+            let mut json = String::from("{");
+            let mut first = true;
+
+            if let Some(d) = distortion {
+                json.push_str(&format!("\"distortion\": {:.2}", d));
+                first = false;
+            }
+
+            if let Some(s) = scale {
+                if !first {
+                    json.push_str(", ");
+                }
+                json.push_str(&format!("\"scale\": {:.2}", s));
+            }
+
+            json.push_str("}");
+
+            let c_str = std::ffi::CString::new(json).unwrap();
+            blur_update_parameters(window, c_str.as_ptr());
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -269,6 +309,7 @@ pub fn run() {
             update_blur_parameters,
             update_noise_parameters,
             update_rain_parameters,
+            update_frosted_parameters,
             get_blur_fps
         ])
         .run(tauri::generate_context!())
