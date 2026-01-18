@@ -79,7 +79,7 @@ public:
     /// @param opts System options
     /// @return true on success
     bool Initialize(const BlurSystemOptions& opts = {});
-
+    
     /// Shutdown the blur system
     void Shutdown();
 

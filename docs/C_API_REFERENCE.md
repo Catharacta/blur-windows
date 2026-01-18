@@ -125,6 +125,38 @@ BLURWINDOW_API BlurErrorCode blur_set_effect_type(BlurWindowHandle window, int32
 - `5`: Glass (シンプルなすりガラス)
 - `6`: FrostedGlass (Voronoi歪み)
 
+### `blur_set_pipeline`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_pipeline(BlurWindowHandle window, const char* json_config);
+```
+エフェクトパイプラインを JSON 構成で完全に再構築します。
+ステート（時間経過など）はリセットされます。
+
+### `blur_update_parameters`
+```c
+BLURWINDOW_API BlurErrorCode blur_update_parameters(BlurWindowHandle window, const char* json_config);
+```
+JSON 文字列に含まれるキーと値に基づいて、現在実行中のエフェクトのパラメータを**部分的**に更新します。
+`blur_set_pipeline` とは異なり、エフェクトの再構築を行わないため、アニメーションの経過時間（Time）などの内部状態は維持され、処理負荷も非常に低いです。
+スライダー操作などによる連続的なパラメータ変更に適しています。
+
+**使用例**:
+`scale` は現在の値を維持し、`distortion` だけを変更したい場合（FrostedGlassなど）：
+```json
+{ "distortion": 2.5 }
+```
+
+**エフェクト別 JSONパラメータ**:
+- **FrostedGlass**:
+    - `"distortion"` (float): 歪み強度 (デフォルト: ~0.02)
+    - `"scale"` (float): 歪みパターンの細かさ (デフォルト: ~50.0)
+
+### `blur_set_bounds`
+```c
+BLURWINDOW_API BlurErrorCode blur_set_bounds(BlurWindowHandle window, const BlurRect* bounds);
+```
+ウィンドウの表示領域を更新します。
+
 ### `blur_set_strength`
 ```c
 BLURWINDOW_API BlurErrorCode blur_set_strength(BlurWindowHandle window, float strength);
@@ -135,11 +167,15 @@ BLURWINDOW_API BlurErrorCode blur_set_strength(BlurWindowHandle window, float st
 ```c
 BLURWINDOW_API BlurErrorCode blur_set_blur_param(BlurWindowHandle window, float param);
 ```
-エフェクト固有のパラメータを設定します。
+エフェクト固有の**単一**パラメータを設定します。
+シンプルなエフェクトの調整に使用されます。
+
 - **Gaussian**: Sigma 値
 - **Box**: 半径 (Radius)
 - **Kawase**: 反復回数 (Iterations)
 - **Radial**: ブラー量 (Amount)
+- **FrostedGlass**: (非対応) 
+    - 複数のパラメータ (`distortion`, `scale`) を持つため、この関数ではなく `blur_update_parameters` を使用してください。
 
 ### `blur_set_tint_color`
 ```c

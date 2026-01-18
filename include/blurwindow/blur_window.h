@@ -29,7 +29,12 @@ public:
     /// Set the effect pipeline from JSON configuration
     /// @param jsonConfig JSON configuration string
     /// @return true on success
+    /// @return true on success
     bool SetEffectPipeline(const std::string& jsonConfig);
+
+    /// Update effect parameters from JSON configuration without resetting the pipeline
+    /// @param jsonConfig JSON configuration string
+    void UpdateEffectParameters(const std::string& jsonConfig);
 
     /// Check if graphics subsystems are initialized
     bool IsInitialized() const;

@@ -104,10 +104,24 @@ async function updateRainParams() {
   });
 }
 
-function toggleRainSection() {
+async function updateFrostedParams() {
+  const distortion = parseInt(document.getElementById("slider-frosted-dist").value) / 100;
+  const scale = parseInt(document.getElementById("slider-frosted-scale").value) / 10;
+
+  await invoke("update_frosted_parameters", {
+    distortion,
+    scale
+  });
+}
+
+function toggleSections() {
   const effectType = parseInt(document.getElementById("select-effect").value);
+
   const rainSection = document.getElementById("rain-section");
   rainSection.style.display = (effectType === 4) ? "block" : "none";
+
+  const frostedSection = document.getElementById("frosted-section");
+  frostedSection.style.display = (effectType === 6) ? "block" : "none";
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -131,7 +145,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const valSpan = document.getElementById(`val-${id.replace('slider-', '').replace('select-', '').replace('color-', '')}`);
       if (valSpan) valSpan.textContent = e.target.value;
       updateBlurParams();
-      if (id === "select-effect") toggleRainSection();
+      if (id === "select-effect") toggleSections();
     });
   });
 
@@ -161,6 +175,22 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       }
       updateRainParams();
+    });
+  });
+
+  // Frosted controls
+  const frostedInputs = ["slider-frosted-dist", "slider-frosted-scale"];
+  frostedInputs.forEach(id => {
+    document.getElementById(id).addEventListener("input", (e) => {
+      const valSpan = document.getElementById(`val-${id.replace('slider-', '')}`);
+      if (valSpan) {
+        if (id === "slider-frosted-dist") {
+          valSpan.textContent = (e.target.value / 100).toFixed(2);
+        } else {
+          valSpan.textContent = (e.target.value / 10).toFixed(1);
+        }
+      }
+      updateFrostedParams();
     });
   });
 
