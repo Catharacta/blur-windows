@@ -46,3 +46,7 @@ target/
 
 # Local handovers
 handover/
+
+# Personal Gemini config
+.gemini/
+.agent/
