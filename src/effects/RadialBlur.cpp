@@ -209,6 +209,8 @@ public:
         context->PSSetShader(m_radialPS.Get(), nullptr, 0);
         ID3D11ShaderResourceView* noisedSRV = m_noisedSRV.Get();
         context->PSSetShaderResources(0, 1, &noisedSRV);
+        context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
+        context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
         context->OMSetRenderTargets(1, m_blurredRTV.GetAddressOf(), nullptr);
         m_fullscreenRenderer.DrawFullscreen(context);
 
