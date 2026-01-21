@@ -24,8 +24,8 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
     // Use 9 fixed samples with adaptive spacing based on radius
     // This provides O(1) complexity regardless of radius
     float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float radiusF = float(radius);
-    float spacing = radiusF / 4.0f;  // 4 samples on each side + center
+    float radiusF = max(float(radius), 1.0f);
+    float spacing = max(radiusF / 4.0f, 0.5f);  // Minimum spacing to avoid artifacts
     
     // 9-tap filter with Gaussian-like weights
     float weights[9] = { 0.05f, 0.09f, 0.12f, 0.15f, 0.18f, 0.15f, 0.12f, 0.09f, 0.05f };
@@ -53,8 +53,8 @@ cbuffer BoxParams : register(b0) {
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
     float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float radiusF = float(radius);
-    float spacing = radiusF / 4.0f;
+    float radiusF = max(float(radius), 1.0f);
+    float spacing = max(radiusF / 4.0f, 0.5f);
     
     float weights[9] = { 0.05f, 0.09f, 0.12f, 0.15f, 0.18f, 0.15f, 0.12f, 0.09f, 0.05f };
     float offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
@@ -222,7 +222,12 @@ public:
 
         D3D11_SAMPLER_DESC samplerDesc = {};
         samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-        samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        // Use BORDER mode with transparent color to avoid streaking artifacts at edges
+        samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+        samplerDesc.BorderColor[0] = 0.0f;
+        samplerDesc.BorderColor[1] = 0.0f;
+        samplerDesc.BorderColor[2] = 0.0f;
+        samplerDesc.BorderColor[3] = 0.0f;
         if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_sampler.GetAddressOf()))) return false;
 
         return true;
