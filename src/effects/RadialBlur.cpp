@@ -94,7 +94,7 @@ float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Tar
 }
 )";
 
-// Radial Blur Shader
+// Radial Blur Shader - Optimized with fixed 8 samples
 static const char* g_RadialBlurPS = R"(
 Texture2D inputTexture : register(t0);
 SamplerState linearSampler : register(s0);
@@ -108,16 +108,19 @@ cbuffer RadialBlurParams : register(b0) {
 };
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
-    float4 color = float4(0, 0, 0, 0);
     float2 dir = texcoord - center;
     float dist = length(dir);
     float amount = blurAmount * saturate(dist / radius);
-    int numSamples = (int)samples;
-    for (int i = 0; i < numSamples; i++) {
-        float scale = 1.0f - amount * (float(i) / float(numSamples - 1));
+    
+    // Fixed 8 samples for stability and performance
+    float4 color = float4(0, 0, 0, 0);
+    [unroll]
+    for (int i = 0; i < 8; i++) {
+        float t = float(i) / 7.0f;
+        float scale = 1.0f - amount * t;
         color += inputTexture.Sample(linearSampler, center + dir * scale);
     }
-    return color / float(numSamples);
+    return color * 0.125f;  // 1/8
 }
 )";
 
@@ -185,6 +188,9 @@ public:
         EnsureTextures(width, height);
         CopyInputToOriginal(context, input);
         m_fullscreenRenderer.SetViewport(context, width, height);
+        
+        ID3D11RenderTargetView* nullRTV = nullptr;
+        ID3D11ShaderResourceView* nullSRV = nullptr;
 
         // Pass 1: Radial Blur
         UpdateConstantBuffer(context, m_blurAmount);
@@ -195,6 +201,10 @@ public:
         context->OMSetRenderTargets(1, m_intermediateRTV.GetAddressOf(), nullptr);
         m_fullscreenRenderer.DrawFullscreen(context);
 
+        // Unbind RTV to avoid hazard
+        context->OMSetRenderTargets(1, &nullRTV, nullptr);
+        context->PSSetShaderResources(0, 1, &nullSRV);
+
         // Pass 2: Noise
         UpdateNoiseConstantBuffer(context);
         context->PSSetShader(m_noisePS.Get(), nullptr, 0);
@@ -204,13 +214,23 @@ public:
         context->OMSetRenderTargets(1, m_noisedRTV.GetAddressOf(), nullptr);
         m_fullscreenRenderer.DrawFullscreen(context);
 
+        // Unbind RTV
+        context->OMSetRenderTargets(1, &nullRTV, nullptr);
+        context->PSSetShaderResources(0, 1, &nullSRV);
+
         // Pass 3: Soften
         UpdateConstantBuffer(context, m_blurAmount * 0.3f);
         context->PSSetShader(m_radialPS.Get(), nullptr, 0);
         ID3D11ShaderResourceView* noisedSRV = m_noisedSRV.Get();
         context->PSSetShaderResources(0, 1, &noisedSRV);
+        context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
+        context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
         context->OMSetRenderTargets(1, m_blurredRTV.GetAddressOf(), nullptr);
         m_fullscreenRenderer.DrawFullscreen(context);
+
+        // Unbind RTV
+        context->OMSetRenderTargets(1, &nullRTV, nullptr);
+        context->PSSetShaderResources(0, 1, &nullSRV);
 
         // Pass 4: Composite
         UpdateCompositeConstantBuffer(context);

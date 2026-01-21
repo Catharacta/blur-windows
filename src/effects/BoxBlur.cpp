@@ -7,7 +7,7 @@
 
 namespace blurwindow {
 
-// Horizontal Box blur shader
+// Horizontal Box blur shader - Optimized with fixed samples and downsampling
 static const char* g_BoxBlurH = R"(
 Texture2D inputTexture : register(t0);
 Texture2D originalTexture : register(t1);
@@ -21,18 +21,26 @@ cbuffer BoxParams : register(b0) {
 };
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
+    // Use 9 fixed samples with adaptive spacing based on radius
+    // This provides O(1) complexity regardless of radius
     float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float count = 0.0f;
-    for (int i = -radius; i <= radius; i++) {
-        float2 offset = float2((float)i * texelSize.x, 0.0f);
-        color += inputTexture.Sample(linearSampler, texcoord + offset);
-        count += 1.0f;
+    float radiusF = max(float(radius), 1.0f);
+    float spacing = max(radiusF / 4.0f, 0.5f);  // Minimum spacing to avoid artifacts
+    
+    // 9-tap filter with Gaussian-like weights
+    float weights[9] = { 0.05f, 0.09f, 0.12f, 0.15f, 0.18f, 0.15f, 0.12f, 0.09f, 0.05f };
+    float offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
+    
+    [unroll]
+    for (int i = 0; i < 9; i++) {
+        float2 offset = float2(offsets[i] * spacing * texelSize.x, 0.0f);
+        color += inputTexture.Sample(linearSampler, texcoord + offset) * weights[i];
     }
-    return color / count;
+    return color;
 }
 )";
 
-// Vertical Box blur shader
+// Vertical Box blur shader - Optimized with fixed samples
 static const char* g_BoxBlurV = R"(
 Texture2D inputTexture : register(t0);
 SamplerState linearSampler : register(s0);
@@ -45,13 +53,18 @@ cbuffer BoxParams : register(b0) {
 
 float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
     float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float count = 0.0f;
-    for (int i = -radius; i <= radius; i++) {
-        float2 offset = float2(0.0f, (float)i * texelSize.y);
-        color += inputTexture.Sample(linearSampler, texcoord + offset);
-        count += 1.0f;
+    float radiusF = max(float(radius), 1.0f);
+    float spacing = max(radiusF / 4.0f, 0.5f);
+    
+    float weights[9] = { 0.05f, 0.09f, 0.12f, 0.15f, 0.18f, 0.15f, 0.12f, 0.09f, 0.05f };
+    float offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
+    
+    [unroll]
+    for (int i = 0; i < 9; i++) {
+        float2 offset = float2(0.0f, offsets[i] * spacing * texelSize.y);
+        color += inputTexture.Sample(linearSampler, texcoord + offset) * weights[i];
     }
-    return color / count;
+    return color;
 }
 )";
 
@@ -209,7 +222,12 @@ public:
 
         D3D11_SAMPLER_DESC samplerDesc = {};
         samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-        samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        // Use BORDER mode with transparent color to avoid streaking artifacts at edges
+        samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+        samplerDesc.BorderColor[0] = 0.0f;
+        samplerDesc.BorderColor[1] = 0.0f;
+        samplerDesc.BorderColor[2] = 0.0f;
+        samplerDesc.BorderColor[3] = 0.0f;
         if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_sampler.GetAddressOf()))) return false;
 
         return true;
