@@ -7,6 +7,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <shared_mutex>
 #include <cstdio>
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -140,7 +141,7 @@ public:
         
         //  D3Dリソースの再作成はRenderLoop内で安全に処理
         {
-            std::lock_guard<std::mutex> lock(m_graphicsMutex);
+            std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
             m_pendingBounds = bounds;
             m_resizeRequested = true;
         }
@@ -172,7 +173,7 @@ public:
 
         auto newEffect = SubsystemFactory::CreateEffect(type);
         if (newEffect && newEffect->Initialize(m_device.Get())) {
-            std::lock_guard<std::mutex> lock(m_graphicsMutex);
+            std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
             // Preserve current strength and apply to new effect
             newEffect->SetStrength(m_currentStrength);
             newEffect->SetNoiseIntensity(m_noiseIntensity);
@@ -190,45 +191,49 @@ public:
     }
 
     void UpdateEffectParameters(const std::string& jsonConfig) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
         if (m_effect) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
             m_effect->SetParameters(jsonConfig.c_str());
         }
     }
 
     void SetBlurStrength(float strength) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
         m_currentStrength = strength;
         LOG_INFO("SetBlurStrength: %.2f", strength);
         if (m_effect) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
             m_effect->SetStrength(strength);
         }
     }
 
     void SetBlurColor(float r, float g, float b, float a) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
         m_tintColor[0] = r; m_tintColor[1] = g; m_tintColor[2] = b; m_tintColor[3] = a;
         if (m_effect) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
             m_effect->SetColor(r, g, b, a);
         }
     }
 
     void SetOpacity(float opacity) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
         m_opacity = opacity;  // Save for effect switching
         if (m_effect) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
             m_effect->SetOpacity(opacity);
         }
     }
 
     void SetEffectType(int type) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
         LOG_INFO("SetEffectType: window=%p, hwnd=%p, type=%d", this, m_hwnd, type);
         SetEffectTypeInternal(type);
     }
 
     void SetCaptureMethod(CaptureType type) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
         
         LOG_INFO("SetCaptureMethod: switching to type %d", static_cast<int>(type));
         
@@ -277,7 +282,22 @@ public:
         LOG_INFO("SetEffectTypeInternal: Successfully switched to type {}", type);
     }
     
-    // Helper: Ensure RainEffect is active (must be called with m_graphicsMutex held)
+    // Helper: Ensure RainEffect is active (must be called with m_lifecycleMutex held (Writer) or handled carefully)
+    // Note: Since SetEffectTypeInternal modifies m_effect, we really need a Writer lock here if we switch effects from parameters.
+    // For now, let's assume parameter updates that *might* switch effects need checking or thread safety.
+    // The previous implementation used a single mutex, so recursive calls were fine if recursive_mutex was used, 
+    // but std::mutex is not recursive. However, EnsureRainEffect is called from SetRain... methods which hold the lock.
+    // SetEffectTypeInternal is also called from there.
+    // With shared_mutex, if SetRain... holds a Shared lock (Reader), we CANNOT upgrade to Unique lock (Writer).
+    // So SetRain... methods must either acquire a Writer lock (heavy) or we double-check.
+    // Given Rain parameters are "parameters", user likely moves sliders. Blocking render thread is bad.
+    // But switching effect IS a heavy operation (reallocate resources).
+    // Proposal: SetRain... methods acquire Writer Lock if they need to switch effect, otherwise Reader lock.
+    // OR simpler: Just use Writer lock for Rain parameters too if they might trigger effect switch.
+    // Let's use Writer lock for simplicity on "EnsureRainEffect" paths since effect switching is rare/one-time.
+    
+    // Actually, to avoid complexity, let's make SetRain... methods use UniqueLock.
+    // They are not high-frequency continuous updates like "Color" or "Strength" usually.
     RainEffect* EnsureRainEffect() {
         auto* rain = dynamic_cast<RainEffect*>(m_effect.get());
         if (!rain) {
@@ -294,8 +314,9 @@ public:
     }
 
     void SetBlurParam(float param) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
         if (m_effect) {
+             std::lock_guard<std::mutex> effectLock(m_effectMutex);
             // This is a bit of a hack since IBlurEffect doesn't have a generic SetParam
             // We'll need to check the effect type or add SetParam to IBlurEffect
             // For now, let's assume SetParameters can handle a simple float-check
@@ -306,62 +327,89 @@ public:
     }
 
     void SetNoiseIntensity(float intensity) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
         LOG_INFO("SetNoiseIntensity: window=%p, hwnd=%p, intensity=%.3f", this, m_hwnd, intensity);
         m_noiseIntensity = intensity;
-        if (m_effect) m_effect->SetNoiseIntensity(intensity);
+        if (m_effect) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
+            m_effect->SetNoiseIntensity(intensity);
+        }
     }
 
     void SetNoiseScale(float scale) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
         m_noiseScale = scale;
-        if (m_effect) m_effect->SetNoiseScale(scale);
+        if (m_effect) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
+            m_effect->SetNoiseScale(scale);
+        }
     }
 
     void SetNoiseSpeed(float speed) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
         m_noiseSpeed = speed;
-        if (m_effect) m_effect->SetNoiseSpeed(speed);
+        if (m_effect) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
+            m_effect->SetNoiseSpeed(speed);
+        }
     }
 
     void SetNoiseType(int type) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
         LOG_INFO("SetNoiseType: window=%p, hwnd=%p, type=%d", this, m_hwnd, type);
         m_noiseType = type;
-        if (m_effect) m_effect->SetNoiseType(type);
+        if (m_effect) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
+            m_effect->SetNoiseType(type);
+        }
     }
 
     // --- Rain Effect Control ---
 
     void SetRainIntensity(float intensity) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
         // Auto-enable RainEffect if intensity > 0
         RainEffect* rain = (intensity > 0) ? EnsureRainEffect() : dynamic_cast<RainEffect*>(m_effect.get());
-        if (rain) rain->SetRainIntensity(intensity);
+        if (rain) {
+             std::lock_guard<std::mutex> effectLock(m_effectMutex);
+             rain->SetRainIntensity(intensity);
+        }
     }
 
     void SetRainDropSpeed(float speed) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
         RainEffect* rain = EnsureRainEffect();
-        if (rain) rain->SetDropSpeed(speed);
+        if (rain) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
+            rain->SetDropSpeed(speed);
+        }
     }
 
     void SetRainRefraction(float strength) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
         RainEffect* rain = EnsureRainEffect();
-        if (rain) rain->SetRefractionStrength(strength);
+        if (rain) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
+            rain->SetRefractionStrength(strength);
+        }
     }
 
     void SetRainTrailLength(float length) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
         RainEffect* rain = EnsureRainEffect();
-        if (rain) rain->SetTrailLength(length);
+        if (rain) {
+             std::lock_guard<std::mutex> effectLock(m_effectMutex);
+             rain->SetTrailLength(length);
+        }
     }
 
     void SetRainDropSize(float minSize, float maxSize) {
-        std::lock_guard<std::mutex> lock(m_graphicsMutex);
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
         RainEffect* rain = EnsureRainEffect();
-        if (rain) rain->SetDropSizeRange(minSize, maxSize);
+        if (rain) {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
+            rain->SetDropSizeRange(minSize, maxSize);
+        }
     }
 
     // --- Click Callback ---
@@ -683,10 +731,14 @@ private:
             }
             
             { // Strict lock around all D3D11 context usage
-                std::lock_guard<std::mutex> lock(m_graphicsMutex);
+                 // Use Shared lock for lifecycle (capture/effect/presenter existence)
+                std::shared_lock<std::shared_mutex> lock(m_lifecycleMutex);
+                
                 if (m_graphicsInitialized && m_capture && m_effect && m_presenter) {
                     ID3D11Texture2D* capturedTexture = nullptr;
+                    // Start capture (heavy op, but now allows params update in parallel)
                     // Inside lock, we rely on the 16ms/0ms timeout in DXGICapture to not block UI too long
+                    // NOW: This shared lock allows SetBlurStrength to proceed.
                     if (m_capture->CaptureFrame(m_options.bounds, &capturedTexture)) {
                         RenderFrame(capturedTexture);
                         if (!firstFrameLogged) {
@@ -734,12 +786,15 @@ private:
         auto t1 = clock::now();
         
         // 1. Update effect animation
-        if (m_effect) {
-            static auto lastUpdate = clock::now();
-            auto now = clock::now();
-            float deltaTime = std::chrono::duration<float>(now - lastUpdate).count();
-            lastUpdate = now;
-            m_effect->Update(deltaTime);
+        {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
+            if (m_effect) {
+                static auto lastUpdate = clock::now();
+                auto now = clock::now();
+                float deltaTime = std::chrono::duration<float>(now - lastUpdate).count();
+                lastUpdate = now;
+                m_effect->Update(deltaTime);
+            }
         }
 
         // 2. Manage SRV for captured texture
@@ -753,8 +808,11 @@ private:
         auto t2 = clock::now();
  
         // 3. Apply blur effect
-        if (!m_effect->Apply(m_context.Get(), m_capturedSRV.Get(), m_outputRTV.Get(), m_width, m_height)) {
-            return;
+        {
+            std::lock_guard<std::mutex> effectLock(m_effectMutex);
+            if (!m_effect->Apply(m_context.Get(), m_capturedSRV.Get(), m_outputRTV.Get(), m_width, m_height)) {
+                return;
+            }
         }
         
         auto t3 = clock::now();
@@ -843,7 +901,8 @@ private:
     std::unique_ptr<IPresenter> m_presenter;
     bool m_useDirectComp = false;
 
-    mutable std::mutex m_graphicsMutex;
+    mutable std::shared_mutex m_lifecycleMutex;
+    mutable std::mutex m_effectMutex;
 
     // Click callback
     BlurWindow::ClickCallback m_clickCallback = nullptr;
