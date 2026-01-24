@@ -278,6 +278,8 @@ BLURWINDOW_API BlurErrorCode blur_set_rain_trail_length(BlurWindowHandle window,
 ```
 落下中の雨粒の軌跡の長さを設定します。
 - `length`: 0.0 (軌跡なし) ～ 1.0 (長い軌跡)
+> [!WARNING]
+> GPU 版実装では現在サポートされていません（設定しても効果はありません）。将来のバージョンで再実装される可能性があります。
 
 ### `blur_set_rain_drop_size`
 ```c
@@ -286,6 +288,8 @@ BLURWINDOW_API BlurErrorCode blur_set_rain_drop_size(BlurWindowHandle window, fl
 雨粒のサイズ範囲を設定します。
 - `minSize`: 最小半径 (ピクセル)
 - `maxSize`: 最大半径 (ピクセル)
+> [!WARNING]
+> GPU 版実装では現在サポートされていません（設定しても効果はありません）。サイズは解像度に応じて自動調整されます。
 
 ---
 

@@ -1,6 +1,5 @@
 #include "RainEffect.h"
 #include "../core/ShaderLoader.h"
-#include "../core/FullscreenRenderer.h"
 #include "../core/Logger.h"
 #include <cstring>
 #include <cstdio>
@@ -8,231 +7,231 @@
 
 namespace blurwindow {
 
-// Passthrough pixel shader (fallback)
-static const char* g_PassthroughPS = R"(
-Texture2D inputTexture : register(t0);
-SamplerState linearSampler : register(s0);
+// Embedded Rain.hlsl
+static const char* g_RainPS = R"(
+Texture2D InputTexture : register(t0);
+SamplerState LinearSampler : register(s0);
 
-float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
-    return inputTexture.Sample(linearSampler, texcoord);
-}
-)";
-
-// Raindrop rendering pixel shader
-// Renders drops to a texture where R=Y refraction, G=X refraction, A=mask
-static const char* g_RaindropPS = R"(
-cbuffer DropParams : register(b0) {
-    float2 dropCenter;   // Normalized position (0-1)
-    float dropRadius;    // Radius in normalized screen space
-    float dropSeed;      // Random variation
+cbuffer Parameters : register(b0) {
+    float Time;
+    float Intensity;
+    float Speed;
+    float Brightness;
+    float NormalStrength;
+    float Zoom;
+    float2 Resolution;    // Screen resolution
+    float2 TexResolution; // Texture resolution
+    int PostProcessing;
+    int Lightning;      
+    float2 Padding;     
 };
 
-float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
-    // Calculate distance from drop center
-    float2 diff = texcoord - dropCenter;
-    float dist = length(diff);
-    
-    // Outside drop radius - fully transparent
-    if (dist > dropRadius) {
-        return float4(0.5, 0.5, 0.0, 0.0);
-    }
-    
-    // Normalized distance within drop (0 at center, 1 at edge)
-    float normDist = dist / dropRadius;
-    
-    // Sphere-like height profile (hemisphere)
-    float height = sqrt(1.0 - normDist * normDist);
-    
-    // Calculate refraction offset based on sphere normal
-    // Normal of hemisphere: (diff.x/r, diff.y/r, height) normalized
-    float3 normal = normalize(float3(diff / dropRadius, height));
-    
-    // Refraction direction (light bending through water drop)
-    // R channel = Y offset, G channel = X offset (following normal mapping convention)
-    float refractionX = normal.x * 0.5 + 0.5;  // Map -1..1 to 0..1
-    float refractionY = normal.y * 0.5 + 0.5;
-    
-    // Alpha is drop visibility (stronger at center, fades at edge)
-    float alpha = height * (1.0 - normDist * normDist * 0.5);
-    
-    return float4(refractionY, refractionX, 0.0, alpha);
+#define S(a, b, t) smoothstep(a, b, t)
+
+// --- Random Functions ---
+float3 N13(float p) {
+    float3 p3 = frac(float3(p, p, p) * float3(0.1031, 0.11369, 0.13787));
+    p3 += dot(p3, p3.yzx + 19.19);
+    return frac(float3((p3.x + p3.y) * p3.z, (p3.x + p3.z) * p3.y, (p3.y + p3.z) * p3.x));
 }
-)";
 
-// Refraction/composite pixel shader - Codrops compatible
-// Applies the drop texture to create the final refraction effect
-static const char* g_RefractionPS = R"(
-Texture2D backgroundBlurred : register(t0);  // Background (will be blurred in shader)
-Texture2D backgroundFocus : register(t1);    // Sharp/focused background for drops
-Texture2D dropTexture : register(t2);         // Drop data (R=Y offset, G=X offset, B=depth, A=mask)
-SamplerState linearSampler : register(s0);
+float4 N14(float t) {
+    return frac(sin(t * float4(123., 1024., 1456., 264.)) * float4(6547., 345., 8799., 1564.));
+}
 
-cbuffer RefractionParams : register(b0) {
-    float refractionStrength;  // 0-1, scaled to pixel range
-    float blurAmount;          // Background blur amount
-    float2 resolution;         // Screen resolution for pixel calculations
+float N(float t) {
+    return frac(sin(t * 12345.564) * 7658.76);
+}
+
+float Saw(float b, float t) {
+    return S(0., b, t) * S(1., b, t);
+}
+
+// --- Drop Simulation ---
+float2 DropLayer2(float2 uv, float t) {
+    float2 UV = uv;
+
+    uv.y += t * 0.75;
+    float2 a = float2(6., 1.);
+    float2 grid = a * 2.;
+    float2 id = floor(uv * grid);
+
+    float colShift = N(id.x);
+    uv.y += colShift;
+
+    id = floor(uv * grid);
+    float3 n = N13(id.x * 35.2 + id.y * 2376.1);
+    float2 st = frac(uv * grid) - float2(.5, 0);
+
+    float x = n.x - .5;
+
+    float y = UV.y * 20.;
+    float wiggle = sin(y + sin(y));
+    x += wiggle * (.5 - abs(x)) * (n.z - .5);
+    x *= .7;
+    float ti = frac(t + n.z);
+    y = (Saw(.85, ti) - .5) * .9 + .5;
+    float2 p = float2(x, y);
+
+    float d = length((st - p) * a.yx);
+
+    float mainDrop = S(.4, .0, d);
+
+    float r = sqrt(S(1., y, st.y));
+    float cd = abs(st.x - x);
+    float trail = S(.23 * r, .15 * r * r, cd);
+    float trailFront = S(-.02, .02, st.y - y);
+    trail *= trailFront * r * r;
+
+    y = UV.y;
+    float trail2 = S(.2 * r, .0, cd);
+    float droplets = max(0., (sin(y * (1. - y) * 120.) - st.y)) * trail2 * trailFront * n.z;
+    y = frac(y * 10.) + (st.y - .5);
+    float dd = length(st - float2(x, y));
+    droplets = S(.3, 0., dd);
+    float m = mainDrop + droplets * r * trailFront;
+
+    // x: drop amount, y: distance mask
+    return float2(m, m);
+}
+
+float StaticDrops(float2 uv, float t) {
+    uv *= 40.;
+
+    float2 id = floor(uv);
+    uv = frac(uv) - .5;
+    float3 n = N13(id.x * 107.45 + id.y * 3543.654);
+    float2 p = (n.xy - .5) * .7;
+    float d = length(uv - p);
+
+    float fade = Saw(.025, frac(t + n.z));
+    float c = S(.3, 0., d) * frac(n.z * 10.) * fade;
+    return c;
+}
+
+float2 GetDrops(float2 uv, float t, float l0, float l1, float l2) {
+    float s = StaticDrops(uv, t) * l0;
+    float2 m1 = DropLayer2(uv, t) * l1;
+    float2 m2 = DropLayer2(uv * 1.85, t) * l2;
+
+    float c = s + m1.x + m2.x;
+    c = S(.3, 1., c);
+
+    return float2(c, max(m1.x * l0, m2.x * l1)); 
+}
+
+struct VS_OUTPUT {
+    float4 Pos : SV_POSITION;
+    float2 Tex : TEXCOORD0;
 };
 
-// Simple 5-tap blur for background (simulates looking through glass)
-float4 blurBackground(float2 uv) {
-    float2 pixelSize = 1.0 / resolution;
-    float blurRadius = blurAmount * 8.0 + 2.0; // 2-10 pixel blur
+float4 main(VS_OUTPUT input) : SV_TARGET {
+    float2 uv = input.Tex;
     
-    float4 color = float4(0, 0, 0, 0);
-    float total = 0.0;
+    // UV for simulation (aspect corrected)
+    float aspect = Resolution.x / Resolution.y;
+    float2 st = uv * float2(aspect, 1.0);
     
-    // Sample in a cross pattern for performance
-    for (int i = -2; i <= 2; ++i) {
-        for (int j = -2; j <= 2; ++j) {
-            float2 offset = float2(i, j) * pixelSize * blurRadius * 0.5;
-            float weight = 1.0 / (1.0 + abs(i) + abs(j));
-            color += backgroundBlurred.Sample(linearSampler, uv + offset) * weight;
-            total += weight;
-        }
-    }
-    return color / total;
-}
+    // Time & Zoom
+    float T = Time + (sin(Time * sin(Time * sin(Time) * 0.5)) * 0.5);
+    float t = T * .2 * Speed;
+    
+    // Zoom
+    float finalZoom = Zoom > 0.0 ? Zoom : 1.0;
+    st *= finalZoom; 
+    
+    float rainAmount = Intensity;
 
-// Gooey effect: blur the drop texture to make drops blend together
-float4 sampleDropWithGooey(float2 uv) {
-    float2 pixelSize = 1.0 / resolution;
-    float gooeyRadius = 3.0; // Pixel radius for gooey blur
-    
-    float4 color = float4(0, 0, 0, 0);
-    float total = 0.0;
-    
-    // 5x5 blur for gooey effect
-    for (int i = -2; i <= 2; ++i) {
-        for (int j = -2; j <= 2; ++j) {
-            float2 offset = float2(i, j) * pixelSize * gooeyRadius;
-            float weight = 1.0 / (1.0 + abs(i) + abs(j));
-            color += dropTexture.Sample(linearSampler, uv + offset) * weight;
-            total += weight;
-        }
-    }
-    return color / total;
-}
+    float staticDrops = S(-.5, 1., rainAmount) * 2.;
+    float layer1 = S(.25, .75, rainAmount);
+    float layer2 = S(.0, .5, rainAmount);
 
-float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target {
-    // Sample drop texture with gooey blur effect
-    float4 drop = sampleDropWithGooey(texcoord);
-    
-    // Get blurred background (looking through frosted glass effect)
-    float4 blurred = blurBackground(texcoord);
-    
-    // Codrops-style alpha processing: alphaMultiply=20, alphaSubtract=5
-    // This creates the gooey threshold effect where nearby drops blend
-    float alpha = saturate(drop.a * 20.0 - 5.0);
-    
-    // If no drop at this pixel after gooey processing, return blurred background
-    if (alpha < 0.01) {
-        return blurred;
+    float2 c = GetDrops(st, t, staticDrops, layer1, layer2);
+
+    // Calculate Normals (Expensive mode for quality)
+    // ddx/ddy often produces blocky artifacts for smooth procedural noise, so manual sampling is preferred for high quality
+    float2 e = float2(.001, 0.) * NormalStrength; 
+    float cx = GetDrops(st + e, t, staticDrops, layer1, layer2).x;
+    float cy = GetDrops(st + e.yx, t, staticDrops, layer1, layer2).x;
+    float2 n = float2(cx - c.x, cy - c.x);
+
+    // Sample background with offset
+    // Note: Assuming InputTexture is ALREADY blurred by previous passes if desired.
+    float4 col = InputTexture.Sample(LinearSampler, uv + n);
+
+    // Post processing (e.g. slight color shift or lightning)
+    if (PostProcessing) {
+        col.rgb *= lerp(float3(1.,1.,1.), float3(0.8, 0.9, 1.3), Intensity * 0.5);
     }
     
-    // Codrops-style refraction calculation
-    float2 refraction = (drop.rg - 0.5) * 2.0;  // Normalized refraction direction
-    float depth = drop.b;                        // Drop depth/thickness
+    // Lightning
+    if (Lightning) {
+        float timeVal = (T + 3.) * .5;
+        float lightning = sin(timeVal * sin(timeVal * 10.));
+        lightning *= pow(max(0., sin(timeVal + sin(timeVal))), 10.);
+        col.rgb *= 1. + lightning * S(0., 10., T) * lerp(1., .1, 0.);
+    }
+
+    col.rgb *= Brightness;
     
-    // Calculate pixel size for proper scaling
-    float2 pixelSize = 1.0 / resolution;
-    
-    // Codrops uses minRefraction=256, maxRefraction=512
-    // We scale this by refractionStrength (default ~0.5)
-    float minRefraction = 128.0 * refractionStrength;
-    float refractionDelta = 256.0 * refractionStrength;
-    float refractionAmount = minRefraction + depth * refractionDelta;
-    
-    // Apply refraction
-    float2 refractedUV = texcoord + pixelSize * refraction * refractionAmount;
-    
-    // Clamp to valid UV range
-    refractedUV = clamp(refractedUV, float2(0.001, 0.001), float2(0.999, 0.999));
-    
-    // Sample blurred background through refraction
-    // Water drops show refracted view of the already-blurred background
-    float4 refracted = blurBackground(refractedUV);
-    
-    // Add subtle highlight at top of drop (where light would reflect)
-    float highlight = saturate(drop.r - 0.5) * 2.0 * alpha * 0.2;
-    refracted.rgb += float3(highlight, highlight, highlight);
-    
-    // Blend refracted view with blurred background
-    return lerp(blurred, refracted, alpha);
+    return col;
 }
 )";
 
+struct RainParams {
+    float Time;
+    float Intensity;
+    float Speed;
+    float Brightness;
+    float NormalStrength;
+    float Zoom;
+    float ResolutionX;
+    float ResolutionY;
+    float TexResolutionX;
+    float TexResolutionY;
+    int PostProcessing;
+    int Lightning;
+    float Padding[2];
+};
 
 bool RainEffect::Initialize(ID3D11Device* device) {
     m_device = device;
     
-    // Initialize random number generator
-    std::random_device rd;
-    m_rng = std::mt19937(rd());
-    
-    // Compile shaders
-    // Passthrough shader (fallback)
-    ComPtr<ID3D11PixelShader> passthroughPS;
-    if (!ShaderLoader::CompilePixelShader(device, g_PassthroughPS, strlen(g_PassthroughPS), "main", passthroughPS.GetAddressOf())) {
+    // Compile embedded shader
+    if (!ShaderLoader::CompilePixelShader(device, g_RainPS, strlen(g_RainPS), "main", m_rainPS.GetAddressOf())) {
+        LOG_ERROR("RainEffect: Failed to compile shader");
         return false;
     }
     
-    // Raindrop rendering shader
-    if (!ShaderLoader::CompilePixelShader(device, g_RaindropPS, strlen(g_RaindropPS), "main", m_raindropPS.GetAddressOf())) {
-        return false;
-    }
-    
-    // Refraction/composite shader
-    if (!ShaderLoader::CompilePixelShader(device, g_RefractionPS, strlen(g_RefractionPS), "main", m_refractionPS.GetAddressOf())) {
-        return false;
-    }
-    
-    // Create sampler state
+    // Create sampler
     D3D11_SAMPLER_DESC samplerDesc = {};
     samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_MIRROR; // Mirror for better edge handling
+    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_MIRROR;
+    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_MIRROR;
     samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
     samplerDesc.MinLOD = 0;
     samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
     
     HRESULT hr = device->CreateSamplerState(&samplerDesc, m_sampler.GetAddressOf());
-    if (FAILED(hr)) {
-        return false;
-    }
+    if (FAILED(hr)) return false;
     
-    // Create constant buffer for refraction parameters
+    // Create constant buffer
     D3D11_BUFFER_DESC cbDesc = {};
-    cbDesc.ByteWidth = 16; // 4 floats: refractionStrength, blurAmount, padding[2]
+    cbDesc.ByteWidth = sizeof(RainParams); // 64 bytes
     cbDesc.Usage = D3D11_USAGE_DYNAMIC;
     cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     
     hr = device->CreateBuffer(&cbDesc, nullptr, m_constantBuffer.GetAddressOf());
-    if (FAILED(hr)) {
-        return false;
-    }
-    
-    // Create drop params constant buffer
-    D3D11_BUFFER_DESC dropCbDesc = {};
-    dropCbDesc.ByteWidth = 16; // dropCenter(2) + dropRadius(1) + dropSeed(1)
-    dropCbDesc.Usage = D3D11_USAGE_DYNAMIC;
-    dropCbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    dropCbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    
-    hr = device->CreateBuffer(&dropCbDesc, nullptr, m_dropParamsBuffer.GetAddressOf());
-    if (FAILED(hr)) {
-        return false;
-    }
+    if (FAILED(hr)) return false;
     
     // Initialize fullscreen renderer
     if (!m_fullscreenRenderer.Initialize(device)) {
-        LOG_ERROR("RainEffect::Initialize - FullscreenRenderer init failed");
         return false;
     }
     
-    LOG_INFO("RainEffect::Initialize - Success (refractionPS=%p, raindropPS=%p)",
-        m_refractionPS.Get(), m_raindropPS.Get());
+    LOG_INFO("RainEffect::Initialize - Success (GPU-based)");
     return true;
 }
 
@@ -243,30 +242,36 @@ bool RainEffect::Apply(
     uint32_t width,
     uint32_t height
 ) {
-    if (!m_refractionPS || !context || !input || !output) {
-        LOG_ERROR("RainEffect::Apply - Invalid state: refractionPS=%p, context=%p, input=%p, output=%p",
-            m_refractionPS.Get(), context, input, output);
-        return false;
+    if (!m_rainPS || !context || !input || !output) return false;
+    
+    // Update constant buffer
+    D3D11_MAPPED_SUBRESOURCE mappedResource;
+    if (SUCCEEDED(context->Map(m_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource))) {
+        RainParams* params = static_cast<RainParams*>(mappedResource.pData);
+        params->Time = m_time;
+        params->Intensity = m_rainIntensity;
+        params->Speed = m_dropSpeed;
+        params->Brightness = m_brightness;
+        params->NormalStrength = m_normalStrength;
+        params->Zoom = m_zoom;
+        params->ResolutionX = static_cast<float>(width);
+        params->ResolutionY = static_cast<float>(height);
+        // Assuming texture resolution matches window size used for render
+        params->TexResolutionX = static_cast<float>(width);
+        params->TexResolutionY = static_cast<float>(height);
+        params->PostProcessing = true; // Hardcoded on for now, or add parameter
+        params->Lightning = false;     // Hardcoded off
+        // Zero padding
+        params->Padding[0] = 0.0f;
+        params->Padding[1] = 0.0f;
+        
+        context->Unmap(m_constantBuffer.Get(), 0);
     }
     
-    // Create/update drop texture if needed (before setting m_lastWidth/Height)
-    if (!CreateDropTexture(width, height)) {
-        LOG_ERROR("RainEffect::Apply - CreateDropTexture failed");
-        return false;
-    }
+    // Set render target
+    context->OMSetRenderTargets(1, &output, nullptr);
     
-    // Store dimensions for simulation (after texture creation)
-    m_lastWidth = width;
-    m_lastHeight = height;
-    
-    // Debug log (every ~60 frames to avoid spam)
-    static int frameCount = 0;
-    if (++frameCount % 60 == 0) {
-        LOG_INFO("RainEffect: drops=%zu, dropletsSize=%zu, intensity=%.2f, dropTexture=%p",
-            m_drops.size(), m_dropletsData.size(), m_rainIntensity, m_dropTexture.Get());
-    }
-    
-    // Set viewport for all passes
+    // Set viewport
     D3D11_VIEWPORT viewport = {};
     viewport.Width = static_cast<float>(width);
     viewport.Height = static_cast<float>(height);
@@ -274,46 +279,18 @@ bool RainEffect::Apply(
     viewport.MaxDepth = 1.0f;
     context->RSSetViewports(1, &viewport);
     
-    // ===== Pass 1: Render raindrops to drop texture =====
-    RenderDropTexture(context, width, height);
-    
-    // ===== Pass 2: Apply refraction and composite =====
-    // Set output as render target
-    context->OMSetRenderTargets(1, &output, nullptr);
-    
-    // Update refraction constant buffer
-    D3D11_MAPPED_SUBRESOURCE mappedResource;
-    if (SUCCEEDED(context->Map(m_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource))) {
-        struct RefractionParams {
-            float refractionStrength;
-            float blurAmount;
-            float resolutionX;
-            float resolutionY;
-        } params;
-        params.refractionStrength = m_refractionStrength;
-        params.blurAmount = m_strength;
-        params.resolutionX = static_cast<float>(width);
-        params.resolutionY = static_cast<float>(height);
-        memcpy(mappedResource.pData, &params, sizeof(params));
-        context->Unmap(m_constantBuffer.Get(), 0);
-    }
-    
-    // Set shader resources
-    // t0 = blurred background (using input as both blurred and focus for now)
-    // t1 = focused background
-    // t2 = drop texture
-    ID3D11ShaderResourceView* srvs[3] = { input, input, m_dropSRV.Get() };
-    context->PSSetShaderResources(0, 3, srvs);
+    // Set resources
+    context->PSSetShader(m_rainPS.Get(), nullptr, 0);
+    context->PSSetShaderResources(0, 1, &input);
     context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
     context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
-    context->PSSetShader(m_refractionPS.Get(), nullptr, 0);
     
-    // Draw fullscreen quad
+    // Draw
     m_fullscreenRenderer.DrawFullscreen(context);
     
     // Cleanup
-    ID3D11ShaderResourceView* nullSRVs[3] = { nullptr, nullptr, nullptr };
-    context->PSSetShaderResources(0, 3, nullSRVs);
+    ID3D11ShaderResourceView* nullSRV = nullptr;
+    context->PSSetShaderResources(0, 1, &nullSRV);
     
     return true;
 }
@@ -326,420 +303,33 @@ void RainEffect::SetColor(float r, float g, float b, float a) {
 }
 
 void RainEffect::Update(float deltaTime) {
-    m_time += deltaTime * m_noiseSpeed;
-    
-    // Update raindrop simulation
-    UpdateDrops(deltaTime);
-}
-
-void RainEffect::UpdateDrops(float deltaTime) {
-    // Codrops-compatible simulation
-    float timeScale = deltaTime * 60.0f; // Normalize to 60fps
-    if (timeScale > 1.1f) timeScale = 1.1f;
-    timeScale *= m_dropSpeed;
-    
-    // Initialize droplets texture if needed
-    if (m_lastWidth > 0 && m_lastHeight > 0) {
-        if (m_dropletsData.empty() || m_dropletsWidth != m_lastWidth || m_dropletsHeight != m_lastHeight) {
-            m_dropletsWidth = m_lastWidth;
-            m_dropletsHeight = m_lastHeight;
-            m_dropletsData.resize(m_dropletsWidth * m_dropletsHeight * 4, 0);
-            // Initialize with neutral values (RG=128)
-            for (size_t i = 0; i < m_dropletsData.size(); i += 4) {
-                m_dropletsData[i + 0] = 128;
-                m_dropletsData[i + 1] = 128;
-                m_dropletsData[i + 2] = 0;
-                m_dropletsData[i + 3] = 0;
-            }
-        }
-    }
-    
-    // Spawn background droplets
-    m_dropletsCounter += m_dropletsRate * timeScale * m_rainIntensity;
-    std::uniform_real_distribution<float> pos01(0.0f, 1.0f);
-    std::uniform_real_distribution<float> smallSize(2.0f, 4.0f);
-    while (m_dropletsCounter >= 1.0f && m_dropletsWidth > 0) {
-        m_dropletsCounter -= 1.0f;
-        float x = pos01(m_rng);
-        float y = pos01(m_rng);
-        float r = smallSize(m_rng);
-        // Draw small droplet to droplets texture
-        int cx = static_cast<int>(x * m_dropletsWidth);
-        int cy = static_cast<int>(y * m_dropletsHeight);
-        int ir = static_cast<int>(r);
-        for (int dy = -ir; dy <= ir; ++dy) {
-            for (int dx = -ir; dx <= ir; ++dx) {
-                int px = cx + dx;
-                int py = cy + dy;
-                if (px >= 0 && px < (int)m_dropletsWidth && py >= 0 && py < (int)m_dropletsHeight) {
-                    float dist = std::sqrt((float)(dx*dx + dy*dy));
-                    if (dist <= r) {
-                        float alpha = (1.0f - dist/r) * 0.3f;
-                        size_t idx = (py * m_dropletsWidth + px) * 4;
-                        m_dropletsData[idx + 3] = (std::max)(m_dropletsData[idx + 3], (uint8_t)(alpha * 255));
-                    }
-                }
-            }
-        }
-    }
-    
-    // Spawn rain drops (chance-based like Codrops)
-    std::uniform_real_distribution<float> chance01(0.0f, 1.0f);
-    float rainChance = 0.3f * m_rainIntensity;
-    int rainLimit = 3;
-    int rainCount = 0;
-    while (chance01(m_rng) < rainChance * timeScale && rainCount < rainLimit && m_drops.size() < 900) {
-        rainCount++;
-        SpawnNewDrops(m_lastWidth, m_lastHeight);
-    }
-    
-    // Update existing drops
-    std::vector<Raindrop> newDrops;
-    
-    for (auto& drop : m_drops) {
-        if (drop.killed) continue;
-        
-        float deltaR = m_maxDropSize - m_minDropSize;
-        
-        // Gravity - chance of drops "creeping down"
-        if (chance01(m_rng) < (drop.radius - m_minDropSize) * (0.1f / deltaR) * timeScale) {
-            std::uniform_real_distribution<float> momDist(0.0f, (drop.radius / m_maxDropSize) * 4.0f);
-            drop.momentum += momDist(m_rng);
-        }
-        
-        // Shrink
-        drop.radius -= drop.shrink * timeScale;
-        if (drop.radius <= 0) {
-            drop.killed = true;
-            continue;
-        }
-        
-        // Spawn trail drops
-        drop.lastSpawn += drop.momentum * timeScale * m_trailLength;
-        if (drop.lastSpawn > drop.nextSpawn && drop.momentum > 0.5f) {
-            std::uniform_real_distribution<float> trailR(0.2f, 0.5f);
-            Raindrop trail;
-            trail.x = drop.x + (chance01(m_rng) - 0.5f) * drop.radius * 0.002f;
-            trail.y = drop.y - drop.radius * 0.005f;  // Increased gap behind parent
-            trail.radius = drop.radius * trailR(m_rng);
-            trail.momentum = 0.0f;
-            trail.momentumX = 0.0f;
-            trail.spreadX = 0.0f;
-            trail.spreadY = drop.momentum * 0.3f;  // More vertical stretch
-            trail.seed = chance01(m_rng);
-            trail.shrink = 0.02f;  // Trail fades over time
-            trail.lastSpawn = 0.0f;
-            trail.nextSpawn = 100.0f;
-            trail.killed = false;
-            trail.isNew = true;
-            trail.parent = &drop;
-            newDrops.push_back(trail);
-            
-            drop.radius *= std::pow(0.97f, timeScale);
-            drop.lastSpawn = 0.0f;
-            drop.nextSpawn = m_minDropSize + chance01(m_rng) * deltaR - drop.momentum * 2.0f;
-        }
-        
-        // Normalize spread
-        drop.spreadX *= std::pow(0.4f, timeScale);
-        drop.spreadY *= std::pow(0.7f, timeScale);
-        
-        // Update position
-        bool moved = drop.momentum > 0;
-        if (moved) {
-            drop.y += drop.momentum * m_dropSpeed * 0.01f;
-            drop.x += drop.momentumX * m_dropSpeed * 0.01f;
-            if (drop.y > 1.1f) {
-                drop.killed = true;
-                continue;
-            }
-        }
-        
-        // Collision detection
-        if ((moved || drop.isNew) && !drop.killed) {
-            for (auto& drop2 : m_drops) {
-                if (&drop == &drop2 || drop2.killed) continue;
-                if (drop.radius <= drop2.radius) continue;
-                if (drop.parent == &drop2 || drop2.parent == &drop) continue;
-                
-                float dx = drop2.x - drop.x;
-                float dy = drop2.y - drop.y;
-                float d = std::sqrt(dx*dx + dy*dy);
-                // Convert radius to normalized coordinates for comparison
-                float normRadius1 = drop.radius / static_cast<float>(m_lastWidth);
-                float normRadius2 = drop2.radius / static_cast<float>(m_lastWidth);
-                float threshold = (normRadius1 + normRadius2) * m_collisionRadius;
-                
-                if (d < threshold) {
-                    // Merge drops
-                    float a1 = 3.14159f * drop.radius * drop.radius;
-                    float a2 = 3.14159f * drop2.radius * drop2.radius;
-                    float targetR = std::sqrt((a1 + a2 * 0.8f) / 3.14159f);
-                    if (targetR > m_maxDropSize) targetR = m_maxDropSize;
-                    
-                    drop.radius = targetR;
-                    drop.momentumX += dx * 0.1f;
-                    drop.spreadX = 0;
-                    drop.spreadY = 0;
-                    drop2.killed = true;
-                    drop.momentum = (std::max)(drop2.momentum, (std::min)(40.0f, drop.momentum + targetR * 0.05f + 1.0f));
-                    
-                    // Clear droplets in path
-                    if (m_dropletsWidth > 0) {
-                        int cx = static_cast<int>(drop.x * m_dropletsWidth);
-                        int cy = static_cast<int>(drop.y * m_dropletsHeight);
-                        int clearR = static_cast<int>(drop.radius * 0.43f);
-                        for (int cdy = -clearR; cdy <= clearR; ++cdy) {
-                            for (int cdx = -clearR; cdx <= clearR; ++cdx) {
-                                int px = cx + cdx;
-                                int py = cy + cdy;
-                                if (px >= 0 && px < (int)m_dropletsWidth && py >= 0 && py < (int)m_dropletsHeight) {
-                                    size_t idx = (py * m_dropletsWidth + px) * 4;
-                                    m_dropletsData[idx + 3] = 0; // Clear alpha
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Slow down momentum
-        drop.momentum -= (std::max)(1.0f, m_minDropSize * 0.5f - drop.momentum) * 0.1f * timeScale;
-        if (drop.momentum < 0) drop.momentum = 0;
-        drop.momentumX *= std::pow(0.7f, timeScale);
-        
-        drop.isNew = false;
-        
-        if (!drop.killed) {
-            newDrops.push_back(drop);
-        }
-    }
-    
-    m_drops = newDrops;
-}
-
-void RainEffect::SpawnNewDrops(uint32_t width, uint32_t height) {
-    (void)width; (void)height;
-    // Codrops-compatible spawning
-    std::uniform_real_distribution<float> posX(0.0f, 1.0f);
-    std::uniform_real_distribution<float> posY(-0.1f, 0.95f);
-    std::uniform_real_distribution<float> chance01(0.0f, 1.0f);
-    
-    // Pow distribution for radius (more small drops)
-    float t = chance01(m_rng);
-    float r = m_minDropSize + std::pow(t, 3.0f) * (m_maxDropSize - m_minDropSize);
-    
-    Raindrop drop;
-    drop.x = posX(m_rng);
-    drop.y = posY(m_rng);
-    drop.radius = r;
-    drop.momentum = 1.0f + ((r - m_minDropSize) * 0.1f) + chance01(m_rng) * 2.0f;
-    drop.momentumX = 0.0f;
-    drop.spreadX = 1.5f;
-    drop.spreadY = 1.5f;
-    drop.seed = chance01(m_rng);
-    drop.shrink = 0.0f;
-    drop.lastSpawn = 0.0f;
-    drop.nextSpawn = chance01(m_rng) * (m_maxDropSize - m_minDropSize);
-    drop.killed = false;
-    drop.isNew = true;
-    drop.parent = nullptr;
-    
-    m_drops.push_back(drop);
-}
-
-void RainEffect::MergeDrops() {
-    // Handled in UpdateDrops collision detection
-}
-
-void RainEffect::RenderDropTexture(ID3D11DeviceContext* context, uint32_t width, uint32_t height) {
-    // Render drops to texture for refraction (Codrops compatible)
-    // R = Y offset for refraction
-    // G = X offset for refraction  
-    // B = depth/thickness
-    // A = drop mask
-    
-    if (!m_dropRTV || !context || !m_raindropPS) return;
-    
-    // Clear drop texture to neutral (0.5, 0.5, 0, 0) - no refraction, no mask
-    float clearColor[4] = { 0.5f, 0.5f, 0.0f, 0.0f };
-    context->ClearRenderTargetView(m_dropRTV.Get(), clearColor);
-    
-    // Set drop texture as render target
-    context->OMSetRenderTargets(1, m_dropRTV.GetAddressOf(), nullptr);
-    
-    // Generate drop texture on CPU
-    std::vector<uint8_t> dropData(width * height * 4);
-    
-    // First, copy droplets background
-    if (!m_dropletsData.empty() && m_dropletsWidth == width && m_dropletsHeight == height) {
-        for (size_t i = 0; i < dropData.size(); i += 4) {
-            dropData[i + 0] = 128;  // R = 0.5
-            dropData[i + 1] = 128;  // G = 0.5
-            dropData[i + 2] = 0;
-            dropData[i + 3] = m_dropletsData[i + 3];  // Copy alpha from droplets
-        }
-    } else {
-        for (size_t i = 0; i < dropData.size(); i += 4) {
-            dropData[i + 0] = 128;
-            dropData[i + 1] = 128;
-            dropData[i + 2] = 0;
-            dropData[i + 3] = 0;
-        }
-    }
-    
-    // Render drops with teardrop shape (scaleX=1, scaleY=1.5, spread)
-    for (const auto& drop : m_drops) {
-        if (drop.killed) continue;
-        
-        int centerX = static_cast<int>(drop.x * width);
-        int centerY = static_cast<int>(drop.y * height);
-        float radius = drop.radius;
-        
-        // Codrops uses scaleX=1, scaleY=1.5 for teardrop shape
-        // Trails have stronger vertical stretch via spreadY
-        float scaleX = 1.0f * (drop.spreadX + 1.0f);
-        float scaleY = 1.5f * (1.0f + drop.spreadY * 2.0f);  // Up to 3x stretch for trails
-        
-        int extentX = static_cast<int>(radius * scaleX);
-        int extentY = static_cast<int>(radius * scaleY);
-        
-        for (int dy = -extentY; dy <= extentY; ++dy) {
-            for (int dx = -extentX; dx <= extentX; ++dx) {
-                int px = centerX + dx;
-                int py = centerY + dy;
-                
-                if (px < 0 || px >= static_cast<int>(width) || 
-                    py < 0 || py >= static_cast<int>(height)) continue;
-                
-                // Normalize to ellipse coordinates
-                float ex = dx / (radius * scaleX);
-                float ey = dy / (radius * scaleY);
-                float dist = std::sqrt(ex * ex + ey * ey);
-                
-                if (dist > 1.0f) continue;
-                
-                // Smoother height profile for more natural look
-                float t = 1.0f - dist;
-                float height_val = t * t * (3.0f - 2.0f * t); // Smoothstep
-                
-                // Add slight variation for organic look
-                float variation = 1.0f + std::sin(ex * 3.14159f * 2.0f) * 0.05f;
-                height_val *= variation;
-                
-                // Calculate normal for refraction
-                float nx = ex * (1.0f - height_val * 0.5f);
-                float ny = ey * (1.0f - height_val * 0.5f);
-                float len = std::sqrt(nx * nx + ny * ny + height_val * height_val);
-                if (len > 0) {
-                    nx /= len;
-                    ny /= len;
-                }
-                
-                // Map to 0-255 range with softer edges
-                float edgeFade = (1.0f - dist) * (1.0f - dist);
-                uint8_t r = static_cast<uint8_t>((ny * 0.5f + 0.5f) * 255);
-                uint8_t g = static_cast<uint8_t>((nx * 0.5f + 0.5f) * 255);
-                uint8_t b = static_cast<uint8_t>(height_val * 255);
-                uint8_t a = static_cast<uint8_t>(height_val * edgeFade * 255);
-                
-                size_t idx = (py * width + px) * 4;
-                if (a > dropData[idx + 3]) {
-                    dropData[idx + 0] = r;
-                    dropData[idx + 1] = g;
-                    dropData[idx + 2] = b;
-                    dropData[idx + 3] = a;
-                }
-            }
-        }
-    }
-    
-    // Upload to GPU texture
-    context->UpdateSubresource(m_dropTexture.Get(), 0, nullptr, 
-        dropData.data(), width * 4, 0);
-}
-
-bool RainEffect::CreateDropTexture(uint32_t width, uint32_t height) {
-    // Phase 2: Create drop texture for refraction mapping
-    
-    if (!m_device) return false;
-    
-    // Only recreate if size changed
-    if (m_lastWidth == width && m_lastHeight == height && m_dropTexture) {
-        return true;
-    }
-    
-    m_lastWidth = width;
-    m_lastHeight = height;
-    
-    // Release old resources
-    m_dropTexture.Reset();
-    m_dropSRV.Reset();
-    m_dropRTV.Reset();
-    
-    // Create drop texture
-    D3D11_TEXTURE2D_DESC texDesc = {};
-    texDesc.Width = width;
-    texDesc.Height = height;
-    texDesc.MipLevels = 1;
-    texDesc.ArraySize = 1;
-    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    texDesc.SampleDesc.Count = 1;
-    texDesc.SampleDesc.Quality = 0;
-    texDesc.Usage = D3D11_USAGE_DEFAULT;
-    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-    
-    HRESULT hr = m_device->CreateTexture2D(&texDesc, nullptr, m_dropTexture.GetAddressOf());
-    if (FAILED(hr)) return false;
-    
-    // Create SRV
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Format = texDesc.Format;
-    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = 1;
-    
-    hr = m_device->CreateShaderResourceView(m_dropTexture.Get(), &srvDesc, m_dropSRV.GetAddressOf());
-    if (FAILED(hr)) return false;
-    
-    // Create RTV
-    D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-    rtvDesc.Format = texDesc.Format;
-    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-    
-    hr = m_device->CreateRenderTargetView(m_dropTexture.Get(), &rtvDesc, m_dropRTV.GetAddressOf());
-    if (FAILED(hr)) return false;
-    
-    return true;
-}
-
-void RainEffect::SetDropSizeRange(float minSize, float maxSize) {
-    m_minDropSize = minSize;
-    m_maxDropSize = maxSize;
+    // Increase time
+    m_time += deltaTime;
 }
 
 bool RainEffect::SetParameters(const char* json) {
     if (!json) return false;
     
-    // Parse simple JSON parameters
-    float intensity = 0.0f;
-    if (sscanf_s(json, "{\"intensity\": %f}", &intensity) == 1) {
-        m_rainIntensity = intensity;
+    // Simple parsing for new parameters
+    // Support legacy "intensity" and new keys
+    float fVal;
+    if (sscanf_s(json, "{\"intensity\": %f}", &fVal) == 1) {
+        m_rainIntensity = fVal;
         return true;
     }
-    
+    // TODO: Use a real JSON parser if more complex interactions needed
     return false;
 }
 
 std::string RainEffect::GetParameters() const {
     char buffer[256];
     std::snprintf(buffer, sizeof(buffer),
-        R"({"intensity": %.2f, "dropSpeed": %.2f, "refraction": %.2f})",
-        m_rainIntensity, m_dropSpeed, m_refractionStrength);
+        R"({"intensity": %.2f, "speed": %.2f, "zoom": %.2f})",
+        m_rainIntensity, m_dropSpeed, m_zoom);
     return std::string(buffer);
 }
 
-// Factory function for SubsystemFactory
+// Factory function
 std::unique_ptr<IBlurEffect> CreateRainEffect() {
     return std::make_unique<RainEffect>();
 }
