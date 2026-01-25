@@ -241,6 +241,8 @@ BLURWINDOW_API BlurErrorCode blur_set_rain_trail_length(BlurWindowHandle window,
 ```
 Sets the trail length of falling raindrops.
 - `length`: 0.0 (no trail) to 1.0 (long trail)
+> [!WARNING]
+> Currently unsupported in the GPU implementation (setting this has no effect). May be reimplemented in future versions.
 
 ### `blur_set_rain_drop_size`
 ```c
@@ -249,6 +251,8 @@ BLURWINDOW_API BlurErrorCode blur_set_rain_drop_size(BlurWindowHandle window, fl
 Sets the raindrop size range.
 - `minSize`: Minimum radius (pixels)
 - `maxSize`: Maximum radius (pixels)
+> [!WARNING]
+> Currently unsupported in the GPU implementation (setting this has no effect). Drop size is automatically adjusted based on resolution.
 
 ---
 
