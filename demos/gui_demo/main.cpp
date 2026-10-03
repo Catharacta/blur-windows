@@ -49,6 +49,7 @@ HWND g_hStatusText = NULL;
 #define ID_SLIDER_RAIN_TRAIL     1053
 #define ID_SLIDER_RAIN_SIZE_MIN  1054
 #define ID_SLIDER_RAIN_SIZE_MAX  1055
+#define ID_SLIDER_RAIN_FOG       1056
 
 HWND g_hComboEffect = NULL;
 COLORREF g_tintColor = RGB(255, 255, 255);
@@ -213,6 +214,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             x + 320, y, 140, 25, hwnd, (HMENU)ID_SLIDER_RAIN_SIZE_MAX, NULL, NULL);
         SendMessage(hRainSizeMax, TBM_SETRANGE, TRUE, MAKELONG(5, 50));
         SendMessage(hRainSizeMax, TBM_SETPOS, TRUE, 20);
+
+        y += 30;
+        CreateWindow(L"STATIC", L"Glass Fog:", WS_VISIBLE | WS_CHILD, x, y, 110, 20, hwnd, NULL, NULL, NULL);
+        HWND hRainFog = CreateWindow(TRACKBAR_CLASS, L"", WS_VISIBLE | WS_CHILD | TBS_AUTOTICKS | TBS_HORZ, 
+            x + 130, y, 300, 25, hwnd, (HMENU)ID_SLIDER_RAIN_FOG, NULL, NULL);
+        SendMessage(hRainFog, TBM_SETRANGE, TRUE, MAKELONG(0, 50));
+        SendMessage(hRainFog, TBM_SETPOS, TRUE, 20);
 
         y += 35;
         CreateWindow(L"STATIC", L"Status:", WS_VISIBLE | WS_CHILD, x, y, 60, 20, hwnd, NULL, NULL, NULL);
@@ -392,6 +400,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_TRAIL)) {
             int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
             g_blurWindow->SetRainTrailLength(pos / 100.0f);
+        } else if (g_blurWindow && (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_FOG)) {
+            int pos = SendMessage((HWND)lParam, TBM_GETPOS, 0, 0);
+            char json[64];
+            snprintf(json, sizeof(json), "{\"background_blur\": %.2f}", pos / 10.0f);
+            g_blurWindow->UpdateEffectParameters(json);
         } else if (g_blurWindow && ((HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_SIZE_MIN) ||
                                     (HWND)lParam == GetDlgItem(hwnd, ID_SLIDER_RAIN_SIZE_MAX))) {
             int minPos = SendMessage(GetDlgItem(hwnd, ID_SLIDER_RAIN_SIZE_MIN), TBM_GETPOS, 0, 0);
@@ -435,7 +448,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     HWND hwnd = CreateWindowEx(
         0, CLASS_NAME, L"BlurWindow Library GUI Demo",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 600, 930,
+        CW_USEDEFAULT, CW_USEDEFAULT, 600, 960,
         NULL, NULL, hInstance, NULL
     );
 

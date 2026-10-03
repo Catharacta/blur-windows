@@ -48,6 +48,24 @@ public:
     void SetBrightness(float brightness) { m_brightness = brightness; }
 
 private:
+    bool PrepareMips(ID3D11DeviceContext* context, ID3D11ShaderResourceView* input);
+
+    // Background mip chain (fogged glass)
+    ComPtr<ID3D11Texture2D> m_mipTex;
+    ComPtr<ID3D11ShaderResourceView> m_mipSRV;
+    UINT m_mipW = 0, m_mipH = 0;
+    DXGI_FORMAT m_mipFormat = DXGI_FORMAT_UNKNOWN;
+    bool m_useMips = true;
+    bool m_mipFailed = false;
+    float m_backgroundBlur = 2.0f;
+
+    // Optional GPU profiling
+    bool m_profile = false;
+    ComPtr<ID3D11Query> m_qDisjoint[4], m_qStart[4], m_qEnd[4];
+    int m_qIndex = 0;
+    double m_gpuMsSum = 0;
+    int m_gpuMsCount = 0;
+
     // GPU resources
     ComPtr<ID3D11PixelShader> m_rainPS;
     ComPtr<ID3D11Buffer> m_constantBuffer;

@@ -2,6 +2,7 @@
 #include "../core/ShaderLoader.h"
 #include "../core/Logger.h"
 #include <cstring>
+#include <cstdlib>
 #include <cstdio>
 #include <algorithm>
 
@@ -27,6 +28,8 @@ cbuffer Parameters : register(b0) {
     float Opacity;
     float TrailLength;  // 0.25..1 : how far the water trail extends above a drop
     float DropSize;     // 1.0 = default drop size
+    float BackgroundBlur; // mip LOD used for fogged glass (0 = sharp)
+    float3 PadBlur;
     float4 TintColor;
 };
 
@@ -99,8 +102,8 @@ float2 DropLayer2(float2 uv, float t) {
     droplets = max(droplets * .5, beads);
     float m = mainDrop + droplets * r * trailFront;
 
-    // x: drop amount, y: distance mask
-    return float2(m, m);
+    // x: drop amount, y: trail (wiped path) mask
+    return float2(m, trail);
 }
 
 float StaticDrops(float2 uv, float t) {
@@ -125,7 +128,7 @@ float2 GetDrops(float2 uv, float t, float l0, float l1, float l2) {
     float c = s + m1.x + m2.x;
     c = S(.3, 1., c);
 
-    return float2(c, max(m1.x * l0, m2.x * l1)); 
+    return float2(c, max(m1.y * l0, m2.y * l1)); 
 }
 
 struct VS_OUTPUT {
@@ -171,9 +174,18 @@ float4 main(VS_OUTPUT input) : SV_TARGET {
     // Back to texture space (Y down) for the refraction offset
     float2 nUV = float2(n.x, -n.y);
 
-    // Sample background with offset
-    // Note: Assuming InputTexture is ALREADY blurred by previous passes if desired.
-    float4 col = InputTexture.Sample(LinearSampler, uv + nUV);
+    // Limit refraction offset so tiny, steep drop edges cannot fling samples far away
+    float nLen = length(nUV);
+    if (nLen > .05) nUV *= .05 / nLen;
+
+    // Sample the mip chain: fogged glass outside drops, light blur inside drops,
+    // and wiped trails are clearer. Averaging via LOD removes the speckle that
+    // fine text produced when a sharp background was refracted by tiny drops.
+    float lodIn = min(1.0, BackgroundBlur);
+    float lodOut = max(BackgroundBlur - c.y * 1.5, lodIn);
+    float focus = lerp(lodOut, lodIn, S(.1, .2, c.x));
+    float4 col = InputTexture.SampleLevel(LinearSampler, uv + nUV, focus);
+
 
     // Small specular highlight on the upper-left rim of each drop (lens-like look)
     float spec = saturate(dot(nUV, float2(-.4, -.9)) * 30. / max(NormalStrength, .1));
@@ -199,7 +211,7 @@ float4 main(VS_OUTPUT input) : SV_TARGET {
     col.rgb = lerp(col.rgb, TintColor.rgb, TintColor.a * TintColor.a);
 
     // Blend with un-distorted original image based on Strength
-    float4 original = InputTexture.Sample(LinearSampler, uv);
+    float4 original = InputTexture.SampleLevel(LinearSampler, uv, 0);
     col.rgb = lerp(original.rgb, col.rgb, Strength);
 
     // Apply Opacity
@@ -226,6 +238,8 @@ struct RainParams {
     float Opacity;
     float TrailLength;
     float DropSize;
+    float BackgroundBlur;
+    float PadBlur[3];
     float TintColor[4];
 };
 
@@ -253,7 +267,7 @@ bool RainEffect::Initialize(ID3D11Device* device) {
     
     // Create constant buffer
     D3D11_BUFFER_DESC cbDesc = {};
-    cbDesc.ByteWidth = sizeof(RainParams); // 80 bytes
+    cbDesc.ByteWidth = sizeof(RainParams); // 96 bytes
     cbDesc.Usage = D3D11_USAGE_DYNAMIC;
     cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -266,7 +280,54 @@ bool RainEffect::Initialize(ID3D11Device* device) {
         return false;
     }
     
+    if (getenv("BLUR_RAIN_NOMIP")) m_useMips = false;
+    if (getenv("BLUR_RAIN_PROFILE")) m_profile = true;
+
     LOG_INFO("RainEffect::Initialize - Success (GPU-based)");
+    return true;
+}
+
+// Copy the captured frame into an internal texture with a full mip chain so the shader
+// can sample pre-averaged (blurred) versions of the background.
+bool RainEffect::PrepareMips(ID3D11DeviceContext* context, ID3D11ShaderResourceView* input) {
+    if (!m_useMips || m_mipFailed) return false;
+
+    ComPtr<ID3D11Resource> res;
+    input->GetResource(res.GetAddressOf());
+    ComPtr<ID3D11Texture2D> tex;
+    if (!res || FAILED(res.As(&tex))) return false;
+
+    D3D11_TEXTURE2D_DESC d = {};
+    tex->GetDesc(&d);
+    if (d.SampleDesc.Count != 1 || d.ArraySize != 1) return false;
+
+    if (!m_mipTex || m_mipW != d.Width || m_mipH != d.Height || m_mipFormat != d.Format) {
+        m_mipTex.Reset();
+        m_mipSRV.Reset();
+
+        D3D11_TEXTURE2D_DESC md = d;
+        md.MipLevels = 0; // full chain
+        md.Usage = D3D11_USAGE_DEFAULT;
+        md.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        md.CPUAccessFlags = 0;
+        md.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+
+        HRESULT hr = m_device->CreateTexture2D(&md, nullptr, m_mipTex.GetAddressOf());
+        if (SUCCEEDED(hr)) hr = m_device->CreateShaderResourceView(m_mipTex.Get(), nullptr, m_mipSRV.GetAddressOf());
+        if (FAILED(hr)) {
+            LOG_WARN("RainEffect: mip texture creation failed (0x%08X), falling back to sharp background", hr);
+            m_mipTex.Reset();
+            m_mipSRV.Reset();
+            m_mipFailed = true;
+            return false;
+        }
+        m_mipW = d.Width;
+        m_mipH = d.Height;
+        m_mipFormat = d.Format;
+    }
+
+    context->CopySubresourceRegion(m_mipTex.Get(), 0, 0, 0, 0, tex.Get(), 0, nullptr);
+    context->GenerateMips(m_mipSRV.Get());
     return true;
 }
 
@@ -278,6 +339,24 @@ bool RainEffect::Apply(
     uint32_t height
 ) {
     if (!m_rainPS || !context || !input || !output) return false;
+
+    if (m_profile) {
+        if (!m_qDisjoint[0]) {
+            D3D11_QUERY_DESC qd = {};
+            qd.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
+            for (int i = 0; i < 4; ++i) m_device->CreateQuery(&qd, m_qDisjoint[i].GetAddressOf());
+            qd.Query = D3D11_QUERY_TIMESTAMP;
+            for (int i = 0; i < 4; ++i) {
+                m_device->CreateQuery(&qd, m_qStart[i].GetAddressOf());
+                m_device->CreateQuery(&qd, m_qEnd[i].GetAddressOf());
+            }
+        }
+        context->Begin(m_qDisjoint[m_qIndex].Get());
+        context->End(m_qStart[m_qIndex].Get());
+    }
+
+    ID3D11ShaderResourceView* srv = input;
+    if (PrepareMips(context, input)) srv = m_mipSRV.Get();
     
     // Update constant buffer
     D3D11_MAPPED_SUBRESOURCE mappedResource;
@@ -300,6 +379,9 @@ bool RainEffect::Apply(
         params->Opacity = m_opacity;
         params->TrailLength = std::clamp(0.25f + m_trailLength * 2.5f, 0.25f, 1.0f);
         params->DropSize = std::clamp(0.5f * (m_dropSizeMin + m_dropSizeMax) / 12.5f, 0.3f, 3.0f);
+        // Without a mip chain there is nothing to blur with, so the LOD has no effect
+        params->BackgroundBlur = (srv == m_mipSRV.Get()) ? m_backgroundBlur : 0.0f;
+        params->PadBlur[0] = params->PadBlur[1] = params->PadBlur[2] = 0.0f;
         memcpy(params->TintColor, m_tintColor, sizeof(m_tintColor));
         
         context->Unmap(m_constantBuffer.Get(), 0);
@@ -318,7 +400,7 @@ bool RainEffect::Apply(
     
     // Set resources
     context->PSSetShader(m_rainPS.Get(), nullptr, 0);
-    context->PSSetShaderResources(0, 1, &input);
+    context->PSSetShaderResources(0, 1, &srv);
     context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
     context->PSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
     
@@ -328,6 +410,27 @@ bool RainEffect::Apply(
     // Cleanup
     ID3D11ShaderResourceView* nullSRV = nullptr;
     context->PSSetShaderResources(0, 1, &nullSRV);
+
+    if (m_profile) {
+        context->End(m_qEnd[m_qIndex].Get());
+        context->End(m_qDisjoint[m_qIndex].Get());
+        m_qIndex = (m_qIndex + 1) % 4;
+        // Read the oldest query (3 frames old) without stalling
+        int ri = m_qIndex;
+        D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj = {};
+        UINT64 t0 = 0, t1 = 0;
+        if (context->GetData(m_qDisjoint[ri].Get(), &dj, sizeof(dj), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK &&
+            context->GetData(m_qStart[ri].Get(), &t0, sizeof(t0), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK &&
+            context->GetData(m_qEnd[ri].Get(), &t1, sizeof(t1), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK &&
+            !dj.Disjoint && dj.Frequency) {
+            m_gpuMsSum += double(t1 - t0) * 1000.0 / double(dj.Frequency);
+            if (++m_gpuMsCount == 120) {
+                LOG_INFO("[RainProfile] mips=%d avg GPU time per Apply: %.3f ms (%ux%u)",
+                    m_mipTex ? 1 : 0, m_gpuMsSum / m_gpuMsCount, width, height);
+                m_gpuMsSum = 0; m_gpuMsCount = 0;
+            }
+        }
+    }
     
     return true;
 }
@@ -344,25 +447,41 @@ void RainEffect::Update(float deltaTime) {
     m_time += deltaTime;
 }
 
+static bool ParseFloatKey(const char* json, const char* key, float& out) {
+    char pattern[64];
+    std::snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    const char* p = strstr(json, pattern);
+    if (!p) return false;
+    p += strlen(pattern);
+    while (*p == ' ' || *p == ':' || *p == '\t') ++p;
+    char* end = nullptr;
+    float v = strtof(p, &end);
+    if (end == p) return false;
+    out = v;
+    return true;
+}
+
 bool RainEffect::SetParameters(const char* json) {
     if (!json) return false;
     
-    // Simple parsing for new parameters
-    // Support legacy "intensity" and new keys
+    bool any = false;
     float fVal;
-    if (sscanf_s(json, "{\"intensity\": %f}", &fVal) == 1) {
+    if (ParseFloatKey(json, "intensity", fVal)) {
         m_rainIntensity = fVal;
-        return true;
+        any = true;
     }
-    // TODO: Use a real JSON parser if more complex interactions needed
-    return false;
+    if (ParseFloatKey(json, "background_blur", fVal)) {
+        m_backgroundBlur = std::clamp(fVal, 0.0f, 5.0f);
+        any = true;
+    }
+    return any;
 }
 
 std::string RainEffect::GetParameters() const {
     char buffer[256];
     std::snprintf(buffer, sizeof(buffer),
-        R"({"intensity": %.2f, "speed": %.2f, "zoom": %.2f})",
-        m_rainIntensity, m_dropSpeed, m_zoom);
+        R"({"intensity": %.2f, "speed": %.2f, "zoom": %.2f, "background_blur": %.2f})",
+        m_rainIntensity, m_dropSpeed, m_zoom, m_backgroundBlur);
     return std::string(buffer);
 }
 
