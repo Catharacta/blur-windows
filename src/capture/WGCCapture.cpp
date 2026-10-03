@@ -12,12 +12,19 @@
 
 namespace blurwindow {
 
-// WinRT apartment initialization (singleton pattern)
-static std::once_flag s_winrtInitFlag;
+// WinRT apartment initialization
 static void EnsureWinRTInitialized() {
-    std::call_once(s_winrtInitFlag, []() {
+    try {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
-    });
+    } catch (winrt::hresult_error const& ex) {
+        // RPC_E_CHANGED_MODE (0x80010106) means the thread is already initialized (e.g. as STA).
+        // This is normal and acceptable for calling WinRT APIs.
+        if (ex.code() != winrt::hresult(RPC_E_CHANGED_MODE)) {
+            LOG_WARN("WGCCapture: init_apartment returned HRESULT 0x%08X", ex.code().value);
+        }
+    } catch (...) {
+        LOG_WARN("WGCCapture: init_apartment failed");
+    }
 }
 
 // Helper to convert ID3D11Device to WinRT IDirect3DDevice
@@ -27,7 +34,7 @@ extern "C" {
 
 WGCCapture::WGCCapture() {
     LOG_INFO("WGCCapture constructor called");
-    // Initialize WinRT (only once per process)
+    // Initialize WinRT on current thread
     try {
         EnsureWinRTInitialized();
         LOG_INFO("WGCCapture WinRT initialized");
@@ -41,16 +48,37 @@ WGCCapture::~WGCCapture() {
     Shutdown();
 }
 
-bool WGCCapture::IsAvailable() {
-    // Windows Graphics Capture is available on Windows 10 1803 (build 17134) and later
+static bool CheckWGCSupportedInternal() {
     try {
+        EnsureWinRTInitialized();
         bool supported = winrt::Windows::Graphics::Capture::GraphicsCaptureSession::IsSupported();
-        // LOG_INFO("WGCCapture::IsAvailable: %d", supported);
+        LOG_INFO("GraphicsCaptureSession::IsSupported returned: %d", supported ? 1 : 0);
         return supported;
+    } catch (winrt::hresult_error const& ex) {
+        LOG_WARN("GraphicsCaptureSession::IsSupported winrt error: 0x%08X", ex.code().value);
+        return false;
+    } catch (std::exception const& e) {
+        LOG_WARN("GraphicsCaptureSession::IsSupported std::exception: %s", e.what());
+        return false;
     } catch (...) {
-        LOG_ERROR("WGCCapture::IsAvailable exception");
+        LOG_WARN("GraphicsCaptureSession::IsSupported unknown exception");
         return false;
     }
+}
+
+static bool CheckWGCSupportedSEH() {
+    __try {
+        return CheckWGCSupportedInternal();
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool WGCCapture::IsAvailable() {
+    // Windows Graphics Capture is available on Windows 10 1803 (build 17134) and later
+    bool supported = CheckWGCSupportedSEH();
+    LOG_INFO("WGCCapture::IsAvailable: %d", supported ? 1 : 0);
+    return supported;
 }
 
 winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice WGCCapture::CreateDirect3DDevice() {
@@ -474,17 +502,20 @@ std::unique_ptr<ICaptureSubsystem> CreateWGCCapture() {
     return std::make_unique<WGCCapture>();
 }
 
+static bool CallWGCAvailableSEH() {
+    __try {
+        return WGCCapture::IsAvailable();
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 // Check if WGC is available (exported for SubsystemFactory)
 bool IsWGCAvailable() {
     LOG_INFO("IsWGCAvailable called");
-    try {
-        bool result = WGCCapture::IsAvailable();
-        LOG_INFO("IsWGCAvailable result: %d", result);
-        return result;
-    } catch (...) {
-        LOG_ERROR("IsWGCAvailable crashed");
-        return false;
-    }
+    bool result = CallWGCAvailableSEH();
+    LOG_INFO("IsWGCAvailable result: %d", result ? 1 : 0);
+    return result;
 }
 
 } // namespace blurwindow

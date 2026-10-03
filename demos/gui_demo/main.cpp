@@ -161,7 +161,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CheckRadioButton(hwnd, ID_RADIO_NOISE_WHITE, ID_RADIO_NOISE_VORONOI, ID_RADIO_NOISE_WHITE);
 
         y += 30;
-        CreateWindow(L"BUTTON", L"Pick Tint Color", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x, y, 120, 30, hwnd, (HMENU)ID_BTN_COLOR, NULL, NULL);
+        CreateWindow(L"BUTTON", L"Color", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, x, y, 100, 30, hwnd, (HMENU)ID_BTN_COLOR, NULL, NULL);
         
         y += 40;
         CreateWindow(L"STATIC", L"Tint Alpha (0-100):", WS_VISIBLE | WS_CHILD, x, y, 120, 20, hwnd, NULL, NULL, NULL);
@@ -262,11 +262,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     if (g_blurWindow->IsInitialized()) {
                         // Apply currently selected effect type
                         int effectType = (int)SendMessage(g_hComboEffect, CB_GETCURSEL, 0, 0);
+                        const wchar_t* effectNames[] = { L"Gaussian", L"Kawase", L"Box", L"Radial", L"Rain", L"Glass", L"FrostedGlass" };
+                        int maxEffects = sizeof(effectNames) / sizeof(effectNames[0]);
+                        if (effectType < 0 || effectType >= maxEffects) {
+                            effectType = 0;
+                        }
                         g_blurWindow->SetEffectType(effectType);
                         
                         ShowWindow(g_blurWindow->GetHWND(), SW_SHOW);
                         
-                        const wchar_t* effectNames[] = { L"Gaussian", L"Kawase", L"Box", L"Radial", L"Rain", L"Glass", L"FrostedGlass" };
                         std::wstring msg = L"BlurWindow started (";
                         msg += effectNames[effectType];
                         msg += L" effect).";
@@ -414,6 +418,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
     // Register the window class
     const wchar_t CLASS_NAME[] = L"BlurWindowGUIDemo";
     WNDCLASS wc = {};
@@ -429,11 +435,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     HWND hwnd = CreateWindowEx(
         0, CLASS_NAME, L"BlurWindow Library GUI Demo",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 600, 880,
+        CW_USEDEFAULT, CW_USEDEFAULT, 600, 930,
         NULL, NULL, hInstance, NULL
     );
 
-    if (hwnd == NULL) return 0;
+    if (hwnd == NULL) {
+        CoUninitialize();
+        return 0;
+    }
 
     ShowWindow(hwnd, nCmdShow);
     SetTimer(hwnd, 1, 500, NULL); // Timer for FPS update
@@ -445,5 +454,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         DispatchMessage(&msg);
     }
 
+    CoUninitialize();
     return 0;
 }

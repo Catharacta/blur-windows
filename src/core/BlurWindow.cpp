@@ -232,6 +232,48 @@ public:
         SetEffectTypeInternal(type);
     }
 
+    std::unique_ptr<ICaptureSubsystem> CreateAndInitCapture(CaptureType type) {
+        if (type == CaptureType::Auto) {
+            // Priority 1: WGC (Windows Graphics Capture)
+            if (IsWGCAvailable()) {
+                auto wgc = SubsystemFactory::CreateCapture(CaptureType::WGC);
+                if (wgc && wgc->Initialize(m_device.Get())) {
+                    LOG_INFO("Capture initialized (WGC).");
+                    return wgc;
+                }
+                LOG_WARN("WGC capture initialization failed, trying DXGI fallback...");
+            }
+            // Priority 2: DXGI Desktop Duplication
+            {
+                auto dxgi = SubsystemFactory::CreateCapture(CaptureType::DXGI);
+                if (dxgi && dxgi->Initialize(m_device.Get())) {
+                    LOG_INFO("Capture initialized (DXGI).");
+                    return dxgi;
+                }
+                LOG_WARN("DXGI capture initialization failed, trying Magnification fallback...");
+            }
+            // Priority 3: Windows Magnification API
+            {
+                auto mag = SubsystemFactory::CreateCapture(CaptureType::Magnification);
+                if (mag && mag->Initialize(m_device.Get())) {
+                    LOG_INFO("Capture initialized (Magnification).");
+                    return mag;
+                }
+                LOG_ERROR("All capture subsystems failed in Auto mode.");
+            }
+            return nullptr;
+        }
+
+        // Specific capture method requested
+        auto cap = SubsystemFactory::CreateCapture(type);
+        if (cap && cap->Initialize(m_device.Get())) {
+            LOG_INFO("Capture initialized (type: %d).", static_cast<int>(type));
+            return cap;
+        }
+        LOG_ERROR("Failed to initialize requested capture type %d.", static_cast<int>(type));
+        return nullptr;
+    }
+
     void SetCaptureMethod(CaptureType type) {
         std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
         
@@ -242,15 +284,9 @@ public:
             m_capture.reset();
         }
         
-        m_capture = SubsystemFactory::CreateCapture(type);
-        if (m_capture) {
-            if (!m_capture->Initialize(m_device.Get())) {
-                LOG_ERROR("Failed to initialize new capture subsystem.");
-                m_capture.reset();
-            } else {
-                if (m_hwnd) m_capture->SetSelfWindow(m_hwnd);
-                LOG_INFO("New capture subsystem initialized.");
-            }
+        m_capture = CreateAndInitCapture(type);
+        if (m_capture && m_hwnd) {
+            m_capture->SetSelfWindow(m_hwnd);
         }
     }
     
@@ -535,15 +571,9 @@ private:
         LOG_INFO("Initializing subsystems...");
 
         // 1. Initialize capture
-        m_capture = SubsystemFactory::CreateCapture(m_options.captureMethod);
-        if (m_capture) {
-            if (!m_capture->Initialize(m_device.Get())) {
-                LOG_ERROR("Failed to initialize capture subsystem.");
-                m_capture.reset();
-            } else {
-                m_capture->SetSelfWindow(m_hwnd);
-                LOG_INFO("Capture initialized.");
-            }
+        m_capture = CreateAndInitCapture(m_options.captureMethod);
+        if (m_capture && m_hwnd) {
+            m_capture->SetSelfWindow(m_hwnd);
         }
         // 2. Initialize effect
         m_effect = SubsystemFactory::CreateEffect(EffectType::Gaussian);
