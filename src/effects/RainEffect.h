@@ -40,8 +40,8 @@ public:
     void SetDropSpeed(float speed) { m_dropSpeed = speed; }
     // Legacy setters kept for API compatibility, mapped to new shader parameters
     void SetRefractionStrength(float strength) { m_normalStrength = strength; } 
-    void SetTrailLength(float /*length*/) { /* No-op in procedural version or mapped if applicable */ }
-    void SetDropSizeRange(float /*minSize*/, float /*maxSize*/) { /* No-op in procedural version */ }
+    void SetTrailLength(float length) { m_trailLength = length; }
+    void SetDropSizeRange(float minSize, float maxSize) { m_dropSizeMin = minSize; m_dropSizeMax = maxSize; }
     
     // New parameters
     void SetZoom(float zoom) { m_zoom = zoom; }
@@ -70,6 +70,9 @@ private:
     float m_normalStrength = 2.0f;     
     float m_zoom = 1.0f;
     float m_brightness = 1.0f;
+    float m_trailLength = 0.3f;
+    float m_dropSizeMin = 5.0f;
+    float m_dropSizeMax = 20.0f;
     
     // Legacy mapping or unused
     float m_noiseIntensity = 0.0f;

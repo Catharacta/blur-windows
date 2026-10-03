@@ -25,7 +25,8 @@ cbuffer Parameters : register(b0) {
     int Lightning;      
     float Strength;
     float Opacity;
-    float2 Padding;     
+    float TrailLength;  // 0.25..1 : how far the water trail extends above a drop
+    float DropSize;     // 1.0 = default drop size
     float4 TintColor;
 };
 
@@ -78,9 +79,11 @@ float2 DropLayer2(float2 uv, float t) {
 
     float d = length((st - p) * a.yx);
 
-    float mainDrop = S(.4, .0, d);
+    float mainDrop = S(.4 * DropSize, .0, d);
 
-    float r = sqrt(S(1., y, st.y));
+    // Trail extends above the drop (y-up space) up to TrailLength of the remaining cell height
+    float trailTop = y + (1. - y) * TrailLength;
+    float r = sqrt(S(trailTop, y, st.y));
     float cd = abs(st.x - x);
     float trail = S(.23 * r, .15 * r * r, cd);
     float trailFront = S(-.02, .02, st.y - y);
@@ -91,7 +94,9 @@ float2 DropLayer2(float2 uv, float t) {
     float droplets = max(0., (sin(y * (1. - y) * 120.) - st.y)) * trail2 * trailFront * n.z;
     y = frac(y * 10.) + (st.y - .5);
     float dd = length(st - float2(x, y));
-    droplets = S(.3, 0., dd);
+    // Small beads left behind along the trail
+    float beads = S(.3 * DropSize, 0., dd);
+    droplets = max(droplets * .5, beads);
     float m = mainDrop + droplets * r * trailFront;
 
     // x: drop amount, y: distance mask
@@ -131,12 +136,18 @@ struct VS_OUTPUT {
 float4 main(VS_OUTPUT input) : SV_TARGET {
     float2 uv = input.Tex;
     
+    // The drop algorithm (Heartfelt) assumes Y points UP. D3D texture space has Y pointing DOWN,
+    // so flip it; otherwise drops climb upward and trails appear below them.
+    float2 uvUp = float2(uv.x, 1.0 - uv.y);
+    
     // UV for simulation (aspect corrected)
     float aspect = Resolution.x / Resolution.y;
-    float2 st = uv * float2(aspect, 1.0);
+    float2 st = uvUp * float2(aspect, 1.0);
     
     // Time & Zoom
-    float T = Time + (sin(Time * sin(Time * sin(Time) * 0.5)) * 0.5);
+    // Time must be monotonic. (The previous sin() time-warp made the clock run backwards
+    // at times, which made drops jitter up and down instead of sliding.)
+    float T = Time;
     float t = T * .2 * Speed;
     
     // Zoom
@@ -157,10 +168,17 @@ float4 main(VS_OUTPUT input) : SV_TARGET {
     float cx = GetDrops(st + e, t, staticDrops, layer1, layer2).x;
     float cy = GetDrops(st + e.yx, t, staticDrops, layer1, layer2).x;
     float2 n = float2(cx - c.x, cy - c.x);
+    // Back to texture space (Y down) for the refraction offset
+    float2 nUV = float2(n.x, -n.y);
 
     // Sample background with offset
     // Note: Assuming InputTexture is ALREADY blurred by previous passes if desired.
-    float4 col = InputTexture.Sample(LinearSampler, uv + n);
+    float4 col = InputTexture.Sample(LinearSampler, uv + nUV);
+
+    // Small specular highlight on the upper-left rim of each drop (lens-like look)
+    float spec = saturate(dot(nUV, float2(-.4, -.9)) * 30. / max(NormalStrength, .1));
+    col.rgb += spec * .15 * S(.05, .3, c.x);
+
 
     // Post processing (e.g. slight color shift or lightning)
     if (PostProcessing) {
@@ -206,7 +224,8 @@ struct RainParams {
     int Lightning;
     float Strength;
     float Opacity;
-    float Padding[2];
+    float TrailLength;
+    float DropSize;
     float TintColor[4];
 };
 
@@ -279,9 +298,8 @@ bool RainEffect::Apply(
         params->Lightning = false;     // Hardcoded off
         params->Strength = m_strength;
         params->Opacity = m_opacity;
-        // Zero padding
-        params->Padding[0] = 0.0f;
-        params->Padding[1] = 0.0f;
+        params->TrailLength = std::clamp(0.25f + m_trailLength * 2.5f, 0.25f, 1.0f);
+        params->DropSize = std::clamp(0.5f * (m_dropSizeMin + m_dropSizeMax) / 12.5f, 0.3f, 3.0f);
         memcpy(params->TintColor, m_tintColor, sizeof(m_tintColor));
         
         context->Unmap(m_constantBuffer.Get(), 0);
