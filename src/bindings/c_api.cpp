@@ -2,6 +2,7 @@
 #include "blurwindow/blurwindow.h"
 #include "blurwindow/blur_window.h"
 #include "../effects/RainEffect.h"
+#include "../core/Logger.h"
 #include <string>
 
 using namespace blurwindow;
@@ -62,7 +63,6 @@ BLURWINDOW_API BlurWindowHandle blur_create_window(BlurSystemHandle sys, void* o
     options.bounds.right = opts->bounds.right;
     options.bounds.bottom = opts->bounds.bottom;
     options.topMost = (opts->topMost != 0);
-    options.clickThrough = (opts->clickThrough != 0);
     options.clickThrough = (opts->clickThrough != 0);
     options.captureMethod = FromCaptureMethodC(opts->captureMethod);
     options.allowCapture = (opts->allowCapture != 0);
@@ -231,10 +231,11 @@ BLURWINDOW_API const char* blur_get_last_error(void) {
 }
 
 BLURWINDOW_API void blur_enable_logging(BlurSystemHandle sys, int32_t enable, const char* path) {
-    // TODO: Implement logging control
     (void)sys;
-    (void)enable;
-    (void)path;
+    Logger::Instance().Enable(enable != 0);
+    if (path) {
+        Logger::Instance().SetOutputPath(path);
+    }
 }
 
 // --- Click Callback ---

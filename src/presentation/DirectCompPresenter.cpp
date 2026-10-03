@@ -86,13 +86,21 @@ public:
         if (width == 0 || height == 0) return false;
         if (width == m_width && height == m_height) return true;
 
+        if (!m_swapChain) return false;
+
+        // Release back buffer references before resize
+        HRESULT hr = m_swapChain->ResizeBuffers(2, width, height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        if (FAILED(hr)) {
+            LOG_ERROR("DirectCompPresenter: ResizeBuffers failed (0x%08X)", hr);
+            return false;
+        }
+
         m_width = width;
         m_height = height;
 
-        // Release back buffer references before resize
-        m_swapChain->ResizeBuffers(2, width, height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
-
-        m_dcompDevice->Commit();
+        if (m_dcompDevice) {
+            m_dcompDevice->Commit();
+        }
         return true;
     }
 

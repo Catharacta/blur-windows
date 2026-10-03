@@ -321,9 +321,15 @@ public:
         if (m_currentTime > 10000.0f) m_currentTime = fmod(m_currentTime, 10000.0f);
     }
     bool SetParameters(const char* json) override { 
-        if (json && strstr(json, "\"param\"")) {
+        if (!json) return false;
+        const char* p = strstr(json, "\"param\"");
+        if (!p) p = strstr(json, "\"radius\"");
+        if (p) {
             float val = 0;
-            if (sscanf_s(json, "{\"param\": %f}", &val) == 1) {
+            if (sscanf_s(p, "\"param\": %f", &val) == 1 ||
+                sscanf_s(p, "\"param\":%f", &val) == 1 ||
+                sscanf_s(p, "\"radius\": %f", &val) == 1 ||
+                sscanf_s(p, "\"radius\":%f", &val) == 1) {
                 m_radius = (int)std::clamp(val, 1.0f, 32.0f);
                 return true;
             }

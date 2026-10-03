@@ -29,7 +29,6 @@ public:
     /// Set the effect pipeline from JSON configuration
     /// @param jsonConfig JSON configuration string
     /// @return true on success
-    /// @return true on success
     bool SetEffectPipeline(const std::string& jsonConfig);
 
     /// Update effect parameters from JSON configuration without resetting the pipeline
@@ -69,7 +68,7 @@ public:
     /// Set noise type (0: White, 1: Sinusoid, 2: Grid, 3: Perlin, 4: Simplex, 5: Voronoi)
     void SetNoiseType(int type);
 
-    /// Set the active effect type (0: Gaussian, 1: Box, 2: Kawase, 3: Radial)
+    /// Set the active effect type (0: Gaussian, 1: Box, 2: Kawase, 3: Radial, 4: Rain, 5: Glass, 6: FrostedGlass)
     void SetEffectType(int type);
 
     /// Set blur-specific parameter (Sigma for Gaussian, Radius for Box, Iterations for Kawase)

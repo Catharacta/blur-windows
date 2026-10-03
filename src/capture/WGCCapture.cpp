@@ -192,8 +192,11 @@ bool WGCCapture::InitializeCaptureForMonitor(int monitorIndex) {
     m_captureItem = nullptr;
     
     // Reset latest frame to avoid showing stall frame from previous monitor
-    m_latestFrame.store(nullptr);
-    m_latestFrameHolder.Reset();
+    {
+        std::lock_guard<std::mutex> lock(m_contextMutex);
+        m_latestFrame.store(nullptr);
+        m_latestFrameHolder.Reset();
+    }
 
     try {
         // Get GraphicsCaptureItem from HMONITOR using interop
@@ -270,6 +273,7 @@ void WGCCapture::OnFrameArrived(
         HRESULT hr = access->GetInterface(IID_PPV_ARGS(&texture));
         
         if (SUCCEEDED(hr) && texture) {
+            std::lock_guard<std::mutex> lock(m_contextMutex);
             // Copy to our texture for thread-safe access
             D3D11_TEXTURE2D_DESC desc;
             texture->GetDesc(&desc);
@@ -382,7 +386,12 @@ bool WGCCapture::CaptureFrame(const RECT& region, ID3D11Texture2D** outTexture) 
     srcBox.front = 0;
     srcBox.back = 1;
 
-    m_context->CopySubresourceRegion(m_cachedTexture.Get(), 0, 0, 0, 0, latestFrame, 0, &srcBox);
+    {
+        std::lock_guard<std::mutex> lock(m_contextMutex);
+        ID3D11Texture2D* currentLatest = m_latestFrame.load();
+        if (!currentLatest) return false;
+        m_context->CopySubresourceRegion(m_cachedTexture.Get(), 0, 0, 0, 0, currentLatest, 0, &srcBox);
+    }
 
     *outTexture = m_cachedTexture.Get();
     return true;
@@ -447,9 +456,13 @@ void WGCCapture::Shutdown() {
 
     m_captureItem = nullptr;
     m_winrtDevice = nullptr;
-    m_latestFrameHolder.Reset();
-    m_cachedTexture.Reset();
-    m_context.Reset();
+    {
+        std::lock_guard<std::mutex> lock(m_contextMutex);
+        m_latestFrame.store(nullptr);
+        m_latestFrameHolder.Reset();
+        m_cachedTexture.Reset();
+        m_context.Reset();
+    }
     m_monitors.clear();
     m_device = nullptr;
     m_initialized = false;

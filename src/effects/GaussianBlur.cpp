@@ -385,9 +385,15 @@ public:
     }
 
     bool SetParameters(const char* json) override {
-        if (json && strstr(json, "\"param\"")) {
+        if (!json) return false;
+        const char* p = strstr(json, "\"param\"");
+        if (!p) p = strstr(json, "\"sigma\"");
+        if (p) {
             float val = 0;
-            if (sscanf_s(json, "{\"param\": %f}", &val) == 1) {
+            if (sscanf_s(p, "\"param\": %f", &val) == 1 ||
+                sscanf_s(p, "\"param\":%f", &val) == 1 ||
+                sscanf_s(p, "\"sigma\": %f", &val) == 1 ||
+                sscanf_s(p, "\"sigma\":%f", &val) == 1) {
                 m_sigma = std::clamp(val, 0.1f, 50.0f);
                 return true;
             }

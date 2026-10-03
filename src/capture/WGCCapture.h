@@ -15,6 +15,7 @@
 #include <memory>
 #include <vector>
 #include <atomic>
+#include <mutex>
 
 namespace blurwindow {
 
@@ -88,6 +89,7 @@ private:
     int m_currentMonitorIndex = -1;
     
     // Latest captured frame (thread-safe access)
+    std::mutex m_contextMutex;
     std::atomic<ID3D11Texture2D*> m_latestFrame{ nullptr };
     ComPtr<ID3D11Texture2D> m_latestFrameHolder;
     

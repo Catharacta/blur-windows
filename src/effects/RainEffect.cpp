@@ -23,7 +23,10 @@ cbuffer Parameters : register(b0) {
     float2 TexResolution; // Texture resolution
     int PostProcessing;
     int Lightning;      
+    float Strength;
+    float Opacity;
     float2 Padding;     
+    float4 TintColor;
 };
 
 #define S(a, b, t) smoothstep(a, b, t)
@@ -174,6 +177,16 @@ float4 main(VS_OUTPUT input) : SV_TARGET {
 
     col.rgb *= Brightness;
     
+    // Tinting (applied with alpha weighting)
+    col.rgb = lerp(col.rgb, TintColor.rgb, TintColor.a * TintColor.a);
+
+    // Blend with un-distorted original image based on Strength
+    float4 original = InputTexture.Sample(LinearSampler, uv);
+    col.rgb = lerp(original.rgb, col.rgb, Strength);
+
+    // Apply Opacity
+    col.a = Opacity;
+    
     return col;
 }
 )";
@@ -191,7 +204,10 @@ struct RainParams {
     float TexResolutionY;
     int PostProcessing;
     int Lightning;
+    float Strength;
+    float Opacity;
     float Padding[2];
+    float TintColor[4];
 };
 
 bool RainEffect::Initialize(ID3D11Device* device) {
@@ -218,7 +234,7 @@ bool RainEffect::Initialize(ID3D11Device* device) {
     
     // Create constant buffer
     D3D11_BUFFER_DESC cbDesc = {};
-    cbDesc.ByteWidth = sizeof(RainParams); // 64 bytes
+    cbDesc.ByteWidth = sizeof(RainParams); // 80 bytes
     cbDesc.Usage = D3D11_USAGE_DYNAMIC;
     cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -261,9 +277,12 @@ bool RainEffect::Apply(
         params->TexResolutionY = static_cast<float>(height);
         params->PostProcessing = true; // Hardcoded on for now, or add parameter
         params->Lightning = false;     // Hardcoded off
+        params->Strength = m_strength;
+        params->Opacity = m_opacity;
         // Zero padding
         params->Padding[0] = 0.0f;
         params->Padding[1] = 0.0f;
+        memcpy(params->TintColor, m_tintColor, sizeof(m_tintColor));
         
         context->Unmap(m_constantBuffer.Get(), 0);
     }

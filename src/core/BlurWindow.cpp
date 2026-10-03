@@ -367,8 +367,17 @@ public:
     // --- Rain Effect Control ---
 
     void SetRainIntensity(float intensity) {
-        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
-        // Auto-enable RainEffect if intensity > 0
+        // Fast path: if already RainEffect, use shared_lock (Reader) to avoid blocking render thread
+        {
+            std::shared_lock<std::shared_mutex> sharedLock(m_lifecycleMutex);
+            if (auto* rain = dynamic_cast<RainEffect*>(m_effect.get())) {
+                std::lock_guard<std::mutex> effectLock(m_effectMutex);
+                rain->SetRainIntensity(intensity);
+                return;
+            }
+        }
+        // Slow path: effect switch needed
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
         RainEffect* rain = (intensity > 0) ? EnsureRainEffect() : dynamic_cast<RainEffect*>(m_effect.get());
         if (rain) {
              std::lock_guard<std::mutex> effectLock(m_effectMutex);
@@ -377,7 +386,15 @@ public:
     }
 
     void SetRainDropSpeed(float speed) {
-        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
+        {
+            std::shared_lock<std::shared_mutex> sharedLock(m_lifecycleMutex);
+            if (auto* rain = dynamic_cast<RainEffect*>(m_effect.get())) {
+                std::lock_guard<std::mutex> effectLock(m_effectMutex);
+                rain->SetDropSpeed(speed);
+                return;
+            }
+        }
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
         RainEffect* rain = EnsureRainEffect();
         if (rain) {
             std::lock_guard<std::mutex> effectLock(m_effectMutex);
@@ -386,7 +403,15 @@ public:
     }
 
     void SetRainRefraction(float strength) {
-        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
+        {
+            std::shared_lock<std::shared_mutex> sharedLock(m_lifecycleMutex);
+            if (auto* rain = dynamic_cast<RainEffect*>(m_effect.get())) {
+                std::lock_guard<std::mutex> effectLock(m_effectMutex);
+                rain->SetRefractionStrength(strength);
+                return;
+            }
+        }
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
         RainEffect* rain = EnsureRainEffect();
         if (rain) {
             std::lock_guard<std::mutex> effectLock(m_effectMutex);
@@ -395,7 +420,15 @@ public:
     }
 
     void SetRainTrailLength(float length) {
-        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
+        {
+            std::shared_lock<std::shared_mutex> sharedLock(m_lifecycleMutex);
+            if (auto* rain = dynamic_cast<RainEffect*>(m_effect.get())) {
+                std::lock_guard<std::mutex> effectLock(m_effectMutex);
+                rain->SetTrailLength(length);
+                return;
+            }
+        }
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
         RainEffect* rain = EnsureRainEffect();
         if (rain) {
              std::lock_guard<std::mutex> effectLock(m_effectMutex);
@@ -404,7 +437,15 @@ public:
     }
 
     void SetRainDropSize(float minSize, float maxSize) {
-        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex); // Writer lock for potential effect switch
+        {
+            std::shared_lock<std::shared_mutex> sharedLock(m_lifecycleMutex);
+            if (auto* rain = dynamic_cast<RainEffect*>(m_effect.get())) {
+                std::lock_guard<std::mutex> effectLock(m_effectMutex);
+                rain->SetDropSizeRange(minSize, maxSize);
+                return;
+            }
+        }
+        std::unique_lock<std::shared_mutex> lock(m_lifecycleMutex);
         RainEffect* rain = EnsureRainEffect();
         if (rain) {
             std::lock_guard<std::mutex> effectLock(m_effectMutex);
@@ -783,19 +824,25 @@ private:
         
         auto t0 = clock::now();
         
-        auto t1 = clock::now();
-        
         // 1. Update effect animation
         {
             std::lock_guard<std::mutex> effectLock(m_effectMutex);
             if (m_effect) {
-                static auto lastUpdate = clock::now();
                 auto now = clock::now();
-                float deltaTime = std::chrono::duration<float>(now - lastUpdate).count();
-                lastUpdate = now;
+                float deltaTime = 0.016f; // Default 60fps for first frame
+                if (m_hasLastUpdate) {
+                    deltaTime = std::chrono::duration<float>(now - m_lastUpdate).count();
+                    // Clamp deltaTime to avoid extreme jumps after pauses/hangs
+                    deltaTime = (std::min)(deltaTime, 0.1f);
+                } else {
+                    m_hasLastUpdate = true;
+                }
+                m_lastUpdate = now;
                 m_effect->Update(deltaTime);
             }
         }
+        
+        auto t1 = clock::now();
 
         // 2. Manage SRV for captured texture
         if (capturedTexture != m_lastCapturedTexture) {
@@ -825,14 +872,15 @@ private:
         // Log timings periodically (only to debug output now)
         static int frameCounter = 0;
         if (++frameCounter % 120 == 0) {
-            auto captureMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+            auto animMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+            auto srvMs = std::chrono::duration<double, std::milli>(t2 - t1).count();
             auto blurMs = std::chrono::duration<double, std::milli>(t3 - t2).count();
             auto presentMs = std::chrono::duration<double, std::milli>(t4 - t3).count();
             auto totalMs = std::chrono::duration<double, std::milli>(t4 - t0).count();
             
             char buf[256];
-            snprintf(buf, sizeof(buf), "[Perf] Cap:%.1fms Blur:%.1fms Pres:%.1fms Total:%.1fms",
-                captureMs, blurMs, presentMs, totalMs);
+            snprintf(buf, sizeof(buf), "[Perf] Anim:%.1fms SRV:%.1fms Blur:%.1fms Pres:%.1fms Total:%.1fms",
+                animMs, srvMs, blurMs, presentMs, totalMs);
             OutputDebugStringA(buf);
             OutputDebugStringA("\n");
         }
@@ -903,6 +951,10 @@ private:
 
     mutable std::shared_mutex m_lifecycleMutex;
     mutable std::mutex m_effectMutex;
+
+    // Animation timing per window instance
+    std::chrono::high_resolution_clock::time_point m_lastUpdate;
+    bool m_hasLastUpdate = false;
 
     // Click callback
     BlurWindow::ClickCallback m_clickCallback = nullptr;

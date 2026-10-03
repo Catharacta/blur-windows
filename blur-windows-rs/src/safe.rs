@@ -13,6 +13,7 @@ impl BlurSystem {
             enable_logging: 1,
             log_path: ptr::null(),
             default_preset: BlurQualityPreset::Balanced,
+            capture_method: BlurCaptureMethod::Auto,
         };
         
         unsafe {
@@ -35,6 +36,8 @@ impl BlurSystem {
             bounds: BlurRect { left: x, top: y, right: x + w, bottom: y + h },
             top_most: 1,
             click_through: 1,
+            capture_method: BlurCaptureMethod::Auto,
+            allow_capture: 0,
         };
 
         unsafe {
@@ -79,6 +82,21 @@ impl BlurWindow {
         let c_json = CString::new(json).map_err(|_| BlurErrorCode::InvalidParameter)?;
         let code = unsafe { blur_set_pipeline(self.handle, c_json.as_ptr()) };
         if code == BlurErrorCode::Ok { Ok(()) } else { Err(code) }
+    }
+
+    pub fn update_parameters(&self, json: &str) -> Result<(), BlurErrorCode> {
+        let c_json = CString::new(json).map_err(|_| BlurErrorCode::InvalidParameter)?;
+        let code = unsafe { blur_update_parameters(self.handle, c_json.as_ptr()) };
+        if code == BlurErrorCode::Ok { Ok(()) } else { Err(code) }
+    }
+
+    pub fn set_opacity(&self, opacity: f32) -> Result<(), BlurErrorCode> {
+        let code = unsafe { blur_set_opacity(self.handle, opacity) };
+        if code == BlurErrorCode::Ok { Ok(()) } else { Err(code) }
+    }
+
+    pub fn get_hwnd(&self) -> *mut std::ffi::c_void {
+        unsafe { blur_get_hwnd(self.handle) }
     }
 
     pub fn get_fps(&self) -> f32 {

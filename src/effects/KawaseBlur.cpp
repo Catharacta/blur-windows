@@ -249,13 +249,15 @@ public:
         if (m_currentTime > 10000.0f) m_currentTime = fmod(m_currentTime, 10000.0f);
     }
     bool SetParameters(const char* json) override { 
-        if (json) {
-            float val = 0;
-            if (strstr(json, "\"iterations\"") && sscanf_s(json, "{\"iterations\": %f}", &val) == 1) {
-                m_iterations = std::clamp(val, 1.0f, 10.0f);
-                return true;
-            }
-            if (strstr(json, "\"param\"") && sscanf_s(json, "{\"param\": %f}", &val) == 1) {
+        if (!json) return false;
+        float val = 0;
+        const char* p = strstr(json, "\"iterations\"");
+        if (!p) p = strstr(json, "\"param\"");
+        if (p) {
+            if (sscanf_s(p, "\"iterations\": %f", &val) == 1 ||
+                sscanf_s(p, "\"iterations\":%f", &val) == 1 ||
+                sscanf_s(p, "\"param\": %f", &val) == 1 ||
+                sscanf_s(p, "\"param\":%f", &val) == 1) {
                 m_iterations = std::clamp(val, 1.0f, 10.0f);
                 return true;
             }

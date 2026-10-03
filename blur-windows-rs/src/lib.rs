@@ -32,6 +32,15 @@ pub enum BlurErrorCode {
     Unknown = -99,
 }
 
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BlurCaptureMethod {
+    Auto = 0,
+    Dxgi = 1,
+    Wgc = 2,
+    Magnification = 3,
+}
+
 #[repr(C)]
 pub struct BlurRect {
     pub left: i32,
@@ -45,6 +54,7 @@ pub struct BlurSystemOptionsC {
     pub enable_logging: i32,     // 0 = false, 1 = true
     pub log_path: *const c_char, // NULL for console
     pub default_preset: BlurQualityPreset,
+    pub capture_method: BlurCaptureMethod,
 }
 
 #[repr(C)]
@@ -53,6 +63,8 @@ pub struct BlurWindowOptionsC {
     pub bounds: BlurRect,
     pub top_most: i32,      // 0 = false, 1 = true
     pub click_through: i32, // 0 = false, 1 = true
+    pub capture_method: BlurCaptureMethod,
+    pub allow_capture: i32, // 0 = false, 1 = true
 }
 
 #[link(name = "blurwindow")]
@@ -70,9 +82,19 @@ extern "C" {
     pub fn blur_set_preset(window: BlurWindowHandle, preset: BlurQualityPreset) -> BlurErrorCode;
     pub fn blur_set_pipeline(window: BlurWindowHandle, json_config: *const c_char)
         -> BlurErrorCode;
+    pub fn blur_update_parameters(
+        window: BlurWindowHandle,
+        json_config: *const c_char,
+    ) -> BlurErrorCode;
     pub fn blur_set_bounds(window: BlurWindowHandle, bounds: *const BlurRect) -> BlurErrorCode;
+    pub fn blur_set_capture_method(
+        window: BlurWindowHandle,
+        method: BlurCaptureMethod,
+    ) -> BlurErrorCode;
+    pub fn blur_get_hwnd(window: BlurWindowHandle) -> *mut std::ffi::c_void;
     pub fn blur_get_fps(window: BlurWindowHandle) -> f32;
     pub fn blur_get_last_error() -> *const c_char;
+    pub fn blur_enable_logging(sys: BlurSystemHandle, enable: i32, path: *const c_char);
 
     // Effect control
     pub fn blur_set_effect_type(window: BlurWindowHandle, effect_type: i32) -> BlurErrorCode;
@@ -85,6 +107,7 @@ extern "C" {
         b: f32,
         a: f32,
     ) -> BlurErrorCode;
+    pub fn blur_set_opacity(window: BlurWindowHandle, opacity: f32) -> BlurErrorCode;
 
     // Noise control
     pub fn blur_set_noise_intensity(window: BlurWindowHandle, intensity: f32) -> BlurErrorCode;
